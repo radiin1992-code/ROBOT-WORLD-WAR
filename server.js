@@ -12,6 +12,9 @@ const BOT_TOKEN = process.env.BOT_TOKEN || "";
 const PUBLIC_URL = process.env.RENDER_EXTERNAL_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? "https://" + process.env.RAILWAY_PUBLIC_DOMAIN : "");
 const MINI_APP_URL = process.env.MINI_APP_URL || PUBLIC_URL;
 const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || "";
+const APP_LINK = (view, extra={}) => { const u=new URL(MINI_APP_URL);u.searchParams.set("view",view);for(const [k,v] of Object.entries(extra))u.searchParams.set(k,String(v));return u.toString(); };
+async function notifyPlayer(id,message,view,extra={}) { const q=await pool.query("SELECT chat_id FROM players WHERE telegram_id=$1 AND chat_id IS NOT NULL",[String(id)]); if(!q.rowCount)return; await telegramApi("sendMessage",{chat_id:q.rows[0].chat_id,text:message,reply_markup:{inline_keyboard:[[{text:"📄 نمایش گزارش",web_app:{url:APP_LINK(view,extra)}}]]}}); }
+async function publishWorldEvent(message,view="market",extra={}) { const q=await pool.query("INSERT INTO world_news(message) VALUES($1) RETURNING id",[message]); const id=q.rows[0].id; const users=await pool.query("SELECT chat_id FROM players WHERE chat_id IS NOT NULL"); await Promise.allSettled(users.rows.map(p=>telegramApi("sendMessage",{chat_id:p.chat_id,text:"🌍 خبر تازه از بازار جهانی\n\n"+message,reply_markup:{inline_keyboard:[[{text:"📄 نمایش گزارش",web_app:{url:APP_LINK(view,{...extra,report:id})}}]]}}))); return id; }
 
 async function telegramApi(method, payload) {
   if (!BOT_TOKEN) return { ok: false, description: "BOT_TOKEN is not configured" };
@@ -51,7 +54,7 @@ async function configureTelegramBot() {
 async function initDb() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS players (
-      telegram_id BIGINT PRIMARY KEY, username TEXT DEFAULT '', first_name TEXT DEFAULT 'Commander',
+      telegram_id BIGINT PRIMARY KEY, username TEXT DEFAULT '', first_name TEXT DEFAULT 'Commander', chat_id BIGINT,
       coins BIGINT NOT NULL DEFAULT 10000000, level INT NOT NULL DEFAULT 1,
       country_code TEXT UNIQUE, country_name TEXT,
       oil BIGINT NOT NULL DEFAULT 300, steel BIGINT NOT NULL DEFAULT 500,
@@ -78,6 +81,7 @@ async function initDb() {
     );
   `);
   await pool.query("ALTER TABLE players ADD COLUMN IF NOT EXISTS energy_level INT NOT NULL DEFAULT 1");
+  await pool.query("ALTER TABLE players ADD COLUMN IF NOT EXISTS chat_id BIGINT");
   await pool.query(`
     CREATE TABLE IF NOT EXISTS game_groups (
       id BIGSERIAL PRIMARY KEY, name TEXT NOT NULL, owner_id BIGINT NOT NULL REFERENCES players(telegram_id),
@@ -144,10 +148,11 @@ app.get("/api/profile",auth,async(req,res)=>{
   const p=q.rows[0]; p.income=Number(Math.max(0,(p.industry-1)*75+(p.agriculture-1)*45+(p.level-1)*30));p.gdp=Number(p.coins)*4;p.population=0;
   res.json({ok:true,profile:p});
 });
+app.get("/api/news",auth,async(_req,res)=>{const q=await pool.query("SELECT id,message FROM world_news ORDER BY id DESC LIMIT 60");res.json({ok:true,items:q.rows});});
 app.get("/api/world",auth,async(_req,res)=>{
-  const [claims,news]=await Promise.all([pool.query("SELECT country_code,telegram_id,country_name FROM players WHERE country_code IS NOT NULL"),pool.query("SELECT message FROM world_news ORDER BY id DESC LIMIT 12")]);
+  const [claims,news]=await Promise.all([pool.query("SELECT country_code,telegram_id,country_name FROM players WHERE country_code IS NOT NULL"),pool.query("SELECT id,message FROM world_news ORDER BY id DESC LIMIT 40")]);
   const claimed={};for(const r of claims.rows)claimed[r.country_code]=r.country_name;
-  res.json({ok:true,claimed,news:news.rows.map(x=>x.message)});
+  res.json({ok:true,claimed,news:news.rows});
 });
 app.post("/api/select-country",auth,async(req,res)=>{
   const {code,name}=req.body||{};
