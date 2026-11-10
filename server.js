@@ -4,7 +4,7 @@ import crypto from "node:crypto";
 
 const { Pool } = pg;
 const app = express();
-app.use(express.json({ limit: "32kb" }));
+app.use(express.json({ limit: "7mb" }));
 app.use(express.static("public"));
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.PGSSL === "true" ? { rejectUnauthorized: false } : undefined, max: 10, idleTimeoutMillis: 30000, connectionTimeoutMillis: 10000 });
 const OWNER_ID = "1852348620";
@@ -52,7 +52,7 @@ async function initDb() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS players (
       telegram_id BIGINT PRIMARY KEY, username TEXT DEFAULT '', first_name TEXT DEFAULT 'Commander',
-      coins BIGINT NOT NULL DEFAULT 12000, level INT NOT NULL DEFAULT 1,
+      coins BIGINT NOT NULL DEFAULT 10000000, level INT NOT NULL DEFAULT 1,
       country_code TEXT UNIQUE, country_name TEXT,
       oil BIGINT NOT NULL DEFAULT 300, steel BIGINT NOT NULL DEFAULT 500,
       food BIGINT NOT NULL DEFAULT 900, energy BIGINT NOT NULL DEFAULT 400,
@@ -78,6 +78,38 @@ async function initDb() {
     );
   `);
   await pool.query("ALTER TABLE players ADD COLUMN IF NOT EXISTS energy_level INT NOT NULL DEFAULT 1");
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS game_groups (
+      id BIGSERIAL PRIMARY KEY, name TEXT NOT NULL, owner_id BIGINT NOT NULL REFERENCES players(telegram_id),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS group_members (
+      group_id BIGINT NOT NULL REFERENCES game_groups(id) ON DELETE CASCADE,
+      telegram_id BIGINT NOT NULL REFERENCES players(telegram_id) ON DELETE CASCADE,
+      joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY(group_id,telegram_id)
+    );
+    CREATE TABLE IF NOT EXISTS group_messages (
+      id BIGSERIAL PRIMARY KEY, group_id BIGINT NOT NULL REFERENCES game_groups(id) ON DELETE CASCADE,
+      telegram_id BIGINT NOT NULL REFERENCES players(telegram_id) ON DELETE CASCADE,
+      body TEXT NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS direct_messages (
+      id BIGSERIAL PRIMARY KEY, sender_id BIGINT NOT NULL REFERENCES players(telegram_id) ON DELETE CASCADE,
+      receiver_id BIGINT NOT NULL REFERENCES players(telegram_id) ON DELETE CASCADE,
+      body TEXT NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS announcements (
+      id BIGSERIAL PRIMARY KEY, telegram_id BIGINT NOT NULL REFERENCES players(telegram_id) ON DELETE CASCADE,
+      caption TEXT NOT NULL DEFAULT '', image_data TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS group_messages_group_id_id_idx ON group_messages(group_id,id);
+    CREATE INDEX IF NOT EXISTS direct_messages_pair_idx ON direct_messages(sender_id,receiver_id,id);
+    CREATE INDEX IF NOT EXISTS announcements_id_idx ON announcements(id DESC);
+  `);
+  await pool.query("ALTER TABLE players ALTER COLUMN coins SET DEFAULT 10000000");
+  await pool.query("ALTER TABLE players ALTER COLUMN oil SET DEFAULT 0, ALTER COLUMN steel SET DEFAULT 0, ALTER COLUMN food SET DEFAULT 0, ALTER COLUMN energy SET DEFAULT 0");
+  await pool.query("UPDATE players SET coins=10000000,oil=0,steel=0,food=0,energy=0 WHERE country_code IS NULL");
+
   const n = await pool.query("SELECT COUNT(*)::int AS n FROM world_news");
   if (!n.rows[0].n) await pool.query("INSERT INTO world_news(message) VALUES ($1),($2),($3)", ["شبکه جهانی ROBOT WORLD WAR راه‌اندازی شد.", "بازار جهانی آماده معامله است.", "فرماندهان جدید می‌توانند کشور خود را انتخاب کنند."]);
 }
@@ -159,6 +191,90 @@ app.post("/api/owner/resource",auth,ownerOnly,async(req,res)=>{
   if(!q.rowCount)return res.status(404).json({ok:false,error:"بازیکن پیدا نشد"});
   await pool.query("INSERT INTO admin_logs(owner_id,target_id,action,details) VALUES($1,$2,'add_resource',$3)",[OWNER_ID,target,JSON.stringify({resource,amount})]);
   await pool.query("INSERT INTO transactions(telegram_id,kind,resource,amount) VALUES($1,'admin',$2,$3)",[target,resource,amount]);res.json({ok:true});
+});
+
+app.get("/api/players",auth,async(req,res)=>{
+  await ensurePlayer(req.user);
+  const q=await pool.query("SELECT telegram_id,first_name,username,country_name,country_code FROM players WHERE country_code IS NOT NULL AND telegram_id<>$1 ORDER BY first_name LIMIT 300",[String(req.user.id)]);
+  res.json({ok:true,players:q.rows});
+});
+app.get("/api/announcements",auth,async(req,res)=>{
+  const q=await pool.query("SELECT a.id,a.telegram_id,a.caption,a.image_data,a.created_at,p.first_name,p.country_name FROM announcements a JOIN players p ON p.telegram_id=a.telegram_id ORDER BY a.id DESC LIMIT 40");
+  res.json({ok:true,items:q.rows});
+});
+app.post("/api/announcements",auth,async(req,res)=>{
+  const caption=String(req.body?.caption||"").trim(), image=String(req.body?.image||"");
+  if(!image.startsWith("data:image/")||image.length>5500000)return res.status(400).json({ok:false,error:"عکس معتبر نیست یا حجمش زیاده (حداکثر حدود 4 مگابایت)."});
+  if(caption.length>1200)return res.status(400).json({ok:false,error:"متن بیانیه خیلی طولانیه."});
+  const q=await pool.query("INSERT INTO announcements(telegram_id,caption,image_data) VALUES($1,$2,$3) RETURNING id",[String(req.user.id),caption,image]);
+  res.json({ok:true,id:q.rows[0].id});
+});
+app.get("/api/groups",auth,async(req,res)=>{
+  const q=await pool.query("SELECT g.id,g.name,g.owner_id,(SELECT COUNT(*)::int FROM group_members gm WHERE gm.group_id=g.id) AS members FROM game_groups g JOIN group_members m ON m.group_id=g.id WHERE m.telegram_id=$1 ORDER BY g.id DESC",[String(req.user.id)]);
+  res.json({ok:true,groups:q.rows});
+});
+app.post("/api/groups",auth,async(req,res)=>{
+  const name=String(req.body?.name||"").trim();
+  if(name.length<2||name.length>48)return res.status(400).json({ok:false,error:"نام گروه باید بین ۲ تا ۴۸ کاراکتر باشه."});
+  const client=await pool.connect();
+  try{await client.query("BEGIN");const g=await client.query("INSERT INTO game_groups(name,owner_id) VALUES($1,$2) RETURNING id,name,owner_id",[name,String(req.user.id)]);await client.query("INSERT INTO group_members(group_id,telegram_id) VALUES($1,$2)",[g.rows[0].id,String(req.user.id)]);await client.query("COMMIT");res.json({ok:true,group:g.rows[0]})}catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
+});
+app.post("/api/groups/:id/members",auth,async(req,res)=>{
+  const id=Number(req.params.id), target=String(req.body?.telegram_id||"");
+  const g=await pool.query("SELECT owner_id FROM game_groups WHERE id=$1",[id]);
+  if(!g.rowCount)return res.status(404).json({ok:false,error:"گروه پیدا نشد."});
+  if(String(g.rows[0].owner_id)!==String(req.user.id))return res.status(403).json({ok:false,error:"فقط سازنده گروه می‌تونه عضو اضافه کنه."});
+  const p=await pool.query("SELECT telegram_id FROM players WHERE telegram_id=$1 AND country_code IS NOT NULL",[target]);
+  if(!p.rowCount)return res.status(404).json({ok:false,error:"بازیکن پیدا نشد."});
+  await pool.query("INSERT INTO group_members(group_id,telegram_id) VALUES($1,$2) ON CONFLICT DO NOTHING",[id,target]);
+  res.json({ok:true});
+});
+app.get("/api/groups/:id/messages",auth,async(req,res)=>{
+  const id=Number(req.params.id), member=await pool.query("SELECT 1 FROM group_members WHERE group_id=$1 AND telegram_id=$2",[id,String(req.user.id)]);
+  if(!member.rowCount)return res.status(403).json({ok:false,error:"عضو این گروه نیستی."});
+  const q=await pool.query("SELECT m.id,m.telegram_id,m.body,m.created_at,p.first_name FROM group_messages m JOIN players p ON p.telegram_id=m.telegram_id WHERE m.group_id=$1 ORDER BY m.id DESC LIMIT 80",[id]);
+  res.json({ok:true,messages:q.rows.reverse()});
+});
+app.post("/api/groups/:id/messages",auth,async(req,res)=>{
+  const id=Number(req.params.id), body=String(req.body?.body||"").trim();
+  if(!body||body.length>2000)return res.status(400).json({ok:false,error:"پیام خالی یا بیش از حد طولانیه."});
+  const member=await pool.query("SELECT 1 FROM group_members WHERE group_id=$1 AND telegram_id=$2",[id,String(req.user.id)]);
+  if(!member.rowCount)return res.status(403).json({ok:false,error:"عضو این گروه نیستی."});
+  await pool.query("INSERT INTO group_messages(group_id,telegram_id,body) VALUES($1,$2,$3)",[id,String(req.user.id),body]);
+  res.json({ok:true});
+});
+app.get("/api/dm/:id",auth,async(req,res)=>{
+  const other=String(req.params.id);
+  const q=await pool.query("SELECT d.id,d.sender_id,d.receiver_id,d.body,d.created_at,p.first_name FROM direct_messages d JOIN players p ON p.telegram_id=d.sender_id WHERE (d.sender_id=$1 AND d.receiver_id=$2) OR (d.sender_id=$2 AND d.receiver_id=$1) ORDER BY d.id DESC LIMIT 80",[String(req.user.id),other]);
+  res.json({ok:true,messages:q.rows.reverse()});
+});
+app.post("/api/dm/:id",auth,async(req,res)=>{
+  const other=String(req.params.id),body=String(req.body?.body||"").trim();
+  if(!body||body.length>2000)return res.status(400).json({ok:false,error:"پیام خالی یا خیلی طولانیه."});
+  if(other===String(req.user.id))return res.status(400).json({ok:false,error:"نمی‌تونی به خودت پیام بدی."});
+  const p=await pool.query("SELECT 1 FROM players WHERE telegram_id=$1 AND country_code IS NOT NULL",[other]);
+  if(!p.rowCount)return res.status(404).json({ok:false,error:"بازیکن پیدا نشد."});
+  await pool.query("INSERT INTO direct_messages(sender_id,receiver_id,body) VALUES($1,$2,$3)",[String(req.user.id),other,body]);
+  res.json({ok:true});
+});
+app.get("/api/shop",auth,async(req,res)=>{
+  res.json({ok:true,items:[
+    {id:"oil",name:"نفت",icon:"🛢️",amount:100,price:180000},
+    {id:"steel",name:"فولاد",icon:"🔩",amount:100,price:140000},
+    {id:"food",name:"غذا",icon:"🌾",amount:250,price:90000},
+    {id:"energy",name:"انرژی",icon:"⚡",amount:100,price:160000},
+    {id:"industry",name:"کارخانه",icon:"🏭",amount:1,price:1200000},
+    {id:"agriculture",name:"مرکز کشاورزی",icon:"🚜",amount:1,price:850000},
+    {id:"technology",name:"مرکز فناوری",icon:"🧬",amount:1,price:1800000}
+  ]});
+});
+app.post("/api/shop/buy",auth,async(req,res)=>{
+  const catalog={oil:{price:180000,amount:100,column:"oil"},steel:{price:140000,amount:100,column:"steel"},food:{price:90000,amount:250,column:"food"},energy:{price:160000,amount:100,column:"energy"},industry:{price:1200000,amount:1,column:"industry"},agriculture:{price:850000,amount:1,column:"agriculture"},technology:{price:1800000,amount:1,column:"technology"}};
+  const item=catalog[req.body?.item];if(!item)return res.status(400).json({ok:false,error:"کالای نامعتبر."});
+  const q=await pool.query(`UPDATE players SET coins=coins-$1,${item.column}=${item.column}+$2,updated_at=NOW() WHERE telegram_id=$3 AND country_code IS NOT NULL AND coins >= $1 RETURNING coins`,[item.price,item.amount,String(req.user.id)]);
+  if(!q.rowCount)return res.status(400).json({ok:false,error:"پول کافی نداری."});
+  await pool.query("INSERT INTO transactions(telegram_id,kind,resource,amount) VALUES($1,'purchase',$2,$3)",[String(req.user.id),item.column,item.amount]);
+  res.json({ok:true,coins:q.rows[0].coins});
 });
 app.post("/telegram/webhook",async(req,res)=>{
   if(WEBHOOK_SECRET && req.get("x-telegram-bot-api-secret-token")!==WEBHOOK_SECRET) return res.sendStatus(403);
