@@ -285,6 +285,8 @@ app.post("/api/shop/buy",auth,async(req,res)=>{
   const q=await pool.query(`UPDATE players SET coins=coins-$1,${item.column}=${item.column}+$2,updated_at=NOW() WHERE telegram_id=$3 AND country_code IS NOT NULL AND coins >= $1 RETURNING coins`,[item.price,item.amount,String(req.user.id)]);
   if(!q.rowCount)return res.status(400).json({ok:false,error:"پول کافی نداری."});
   await pool.query("INSERT INTO transactions(telegram_id,kind,resource,amount) VALUES($1,'purchase',$2,$3)",[String(req.user.id),item.column,item.amount]);
+  const buyer=await pool.query("SELECT country_name,first_name FROM players WHERE telegram_id=$1",[String(req.user.id)]);
+  await publishWorldEvent("🏪 "+(buyer.rows[0]?.country_name||buyer.rows[0]?.first_name)+" از بازار جهانی "+item.amount+" واحد "+item.column+" خریداری کرد.");
   res.json({ok:true,coins:q.rows[0].coins});
 });
 app.post("/telegram/webhook",async(req,res)=>{
