@@ -3,11 +3,12 @@ import pg from "pg";
 import crypto from "node:crypto";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
-const worldTopology = require("world-atlas/countries-50m.json");
+const worldTopology = require("world-atlas/countries-110m.json");
 const topojson = require("topojson-client");
 const isoCountries = require("i18n-iso-countries");
 const localWorldGeoJSON = (() => { const collection = topojson.feature(worldTopology, worldTopology.objects.countries); return { type: "FeatureCollection", features: collection.features.map(f => { const a3 = isoCountries.numericToAlpha3(String(f.id).padStart(3, "0")); const a2 = isoCountries.numericToAlpha2(String(f.id).padStart(3, "0")); return { ...f, properties: { ...f.properties, ADMIN: f.properties?.name || "Unknown", ISO_A3: a3 || "", ISO_A2: a2 || "" } }; }).filter(f => /^[A-Z]{3}$/.test(f.properties.ISO_A3)) }; })();
 
+let mapTextureCache=null;
 const { Pool } = pg;
 const app = express();
 app.use(express.json({ limit: "7mb" }));
@@ -38,10 +39,8 @@ async function configureTelegramBot() {
     console.error("Telegram setup skipped: BOT_TOKEN or HTTPS MINI_APP_URL is missing");
     return;
   }
-  await Promise.all([
-    telegramApi("setMyName", { name: "radinwar💥" }),
-    telegramApi("setMyDescription", { description: "به radinwar💥 خوش آمدی! کشور انتخاب کن، اقتصاد بساز، با فرماندهان دیگر گفت‌وگو کن و در یک جهان استراتژیک رقابت کن." }),
-    telegramApi("setMyShortDescription", { short_description: "بازی استراتژیک آنلاین؛ کشور، اقتصاد و رقابت جهانی 🌍" }),
+  // Profile text is configured once in BotFather. Avoid repeating Telegram profile writes on every restart.
+  await Promise.allSettled([
     telegramApi("setMyCommands", { commands: [
       { command: "start", description: "شروع بازی و ورود به نقشه جهان" },
       { command: "game", description: "نمایش دکمه ورود به بازی" },
