@@ -124,11 +124,33 @@ function loadGlobeLibrary(){
   globeLibraryPromise=(async()=>{
     const sources=["https://unpkg.com/globe.gl","https://cdn.jsdelivr.net/npm/globe.gl"];
     for(const src of sources){
-      try{await new Promise((resolve,reject)=>{const script=document.createElement("script");script.src=src;script.async=true;script.onload=resolve;script.onerror=()=>{script.remove();reject(new Error("Globe library unavailable"))};document.head.appendChild(script)});if(typeof window.Globe==="function")return}catch(e){console.warn("3D map library fallback:",e)}
+      try{await new Promise((resolve,reject)=>{const script=document.createElement("script");script.src=src;script.async=true;let settled=false;const timer=setTimeout(()=>{if(!settled){settled=true;script.remove();reject(new Error("Globe CDN timeout"))}},7000);script.onload=()=>{if(!settled){settled=true;clearTimeout(timer);resolve()}};script.onerror=()=>{if(!settled){settled=true;clearTimeout(timer);script.remove();reject(new Error("Globe library unavailable"))}};document.head.appendChild(script)});if(typeof window.Globe==="function")return}catch(e){console.warn("3D map library fallback:",e)}
     }
     globeLibraryPromise=null;throw new Error("کتابخانهٔ نقشهٔ سه‌بعدی بارگذاری نشد");
   })();
   return globeLibraryPromise;
+}
+function renderFallbackWorldMap(el){
+  if(!el||!geo)return;
+  if(window.radinwarGlobe){try{window.radinwarGlobe.pauseAnimation?.();window.radinwarGlobe._destructor?.()}catch{}window.radinwarGlobe=null}
+  if(window.radinwarMapResize){window.radinwarMapResize.disconnect();window.radinwarMapResize=null}
+  const features=geo.features.filter(f=>f.geometry&&/^[A-Z]{3}$/.test(iso3(f)));
+  const paths=features.map(f=>{
+    const code=iso3(f),state=code===me?.country_code?"own":claims[code]?"held":"free";
+    return '<path class="world-country '+state+'" d="'+geomPath(f.geometry)+'"><title>'+cname(f)+(claims[code]?' • دارای فرمانده':'')+'</title></path>';
+  }).join('');
+  const labels=features.filter(f=>claims[iso3(f)]||iso3(f)===me?.country_code).map(f=>{
+    const p=countryCenter(f);return '<text class="map-label" x="'+project(p.lng,p.lat)[0].toFixed(1)+'" y="'+project(p.lng,p.lat)[1].toFixed(1)+'">'+flag(iso2(f))+'</text>';
+  }).join('');
+  el.innerHTML='<div class="map-zoom"><button id="mapZoomIn" aria-label="بزرگ‌نمایی">＋</button><button id="mapZoomOut" aria-label="کوچک‌نمایی">−</button><button id="mapReset" aria-label="بازنشانی">⌖</button></div><div class="globe-hint">نقشهٔ سبک جایگزین • بکش تا جابه‌جا شود • دو انگشت برای زوم</div><svg id="fallbackWorldMap" class="world-map-svg" viewBox="0 0 1000 500" role="img" aria-label="نقشه جهان"><rect width="1000" height="500" fill="#061522"/><g class="map-graticule"><path d="M0 125H1000 M0 250H1000 M0 375H1000 M250 0V500 M500 0V500 M750 0V500"/></g><g id="fallbackWorldLayer">'+paths+labels+'</g></svg>';
+  const svg=$("fallbackWorldMap"),layer=$("fallbackWorldLayer");let view={x:0,y:0,w:1000,h:500},pointers=new Map(),last=null,lastDistance=0;
+  const apply=()=>svg.setAttribute("viewBox",[view.x,view.y,view.w,view.h].join(" "));
+  const zoom=(factor)=>{const nw=Math.max(260,Math.min(1000,view.w*factor)),nh=nw/2,cx=view.x+view.w/2,cy=view.y+view.h/2;view={x:Math.max(0,Math.min(1000-nw,cx-nw/2)),y:Math.max(0,Math.min(500-nh,cy-nh/2)),w:nw,h:nh};apply()};
+  svg.addEventListener("pointerdown",e=>{svg.setPointerCapture(e.pointerId);pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});last={x:e.clientX,y:e.clientY};if(pointers.size===2){const a=[...pointers.values()];lastDistance=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)}});
+  svg.addEventListener("pointermove",e=>{if(!pointers.has(e.pointerId))return;pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});if(pointers.size===1&&last){const r=svg.getBoundingClientRect();view.x=Math.max(0,Math.min(1000-view.w,view.x-(e.clientX-last.x)*view.w/r.width));view.y=Math.max(0,Math.min(500-view.h,view.y-(e.clientY-last.y)*view.h/r.height));last={x:e.clientX,y:e.clientY};apply()}else if(pointers.size===2){const a=[...pointers.values()],d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);if(lastDistance&&d)zoom(lastDistance/d);lastDistance=d}});
+  const end=e=>{pointers.delete(e.pointerId);last=null;lastDistance=0};svg.addEventListener("pointerup",end);svg.addEventListener("pointercancel",end);
+  svg.addEventListener("wheel",e=>{e.preventDefault();zoom(e.deltaY<0?.86:1.16)},{passive:false});
+  $("mapZoomIn").onclick=()=>zoom(.82);$("mapZoomOut").onclick=()=>zoom(1.22);$("mapReset").onclick=()=>{view={x:0,y:0,w:1000,h:500};apply()};
 }
 async function renderWorldMap(){
   const el=$("globeViz");if(!el||!geo)return;
@@ -146,7 +168,7 @@ async function renderWorldMap(){
     const world=window.Globe()(el)
       .width(w).height(h)
       .backgroundColor("#050b14")
-      .globeImageUrl("https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg")
+      .globeImageUrl("/api/map-texture")
       .showAtmosphere(true).atmosphereColor("#69c8ff").atmosphereAltitude(0.12)
       .showGraticules(false);
     // Skip thousands of detailed country polygons: they were freezing mobile GPUs.
