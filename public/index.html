@@ -31,7 +31,7 @@ main{max-width:1180px;margin:auto;padding:16px}.eyebrow{color:var(--cyan);font-s
 </main><div id="toast" class="toast"></div>
 <script>
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();tg?.setHeaderColor?.('#080d18');tg?.setBackgroundColor?.('#080d18');
-const $=id=>document.getElementById(id),OWNER_ID='1852348620',GEO_URL='https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson';let me=null,geo=null,claims={},countries=[],activeGroup=null,activeDm=null,players=[];
+const $=id=>document.getElementById(id),OWNER_ID='1852348620',GEO_URL='https://cdn.jsdelivr.net/gh/datasets/geo-countries@master/data/countries.geojson';let me=null,geo=null,claims={},countries=[],activeGroup=null,activeDm=null,players=[];
 function toast(s){$('toast').textContent=s;$('toast').classList.add('show');setTimeout(()=>$('toast').classList.remove('show'),2600)}
 async function api(path,body){try{const r=await fetch('/api/'+path,{method:body?'POST':'GET',headers:{'content-type':'application/json','x-telegram-init-data':tg?.initData||''},body:body?JSON.stringify(body):undefined});const d=await r.json();if(!r.ok)throw Error(d.error||'خطای سرور');return d}catch(e){toast(e.message);return {ok:false,error:e.message}}}
 function flag(code){if(!/^[A-Z]{2}$/.test(code||''))return '🏳️';return [...code].map(x=>String.fromCodePoint(127397+x.charCodeAt(0))).join('')}
