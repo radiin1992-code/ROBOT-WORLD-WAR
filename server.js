@@ -138,8 +138,8 @@ async function auth(req,res,next) {
   req.user = user; next();
 }
 async function ensurePlayer(user) {
-  await pool.query(`INSERT INTO players(telegram_id,username,first_name) VALUES($1,$2,$3)
-    ON CONFLICT(telegram_id) DO UPDATE SET username=EXCLUDED.username,first_name=EXCLUDED.first_name,updated_at=NOW()`,
+  await pool.query(`INSERT INTO players(telegram_id,username,first_name,chat_id) VALUES($1,$2,$3,$1)
+    ON CONFLICT(telegram_id) DO UPDATE SET username=EXCLUDED.username,first_name=EXCLUDED.first_name,chat_id=COALESCE(players.chat_id,EXCLUDED.chat_id),updated_at=NOW()`,
     [String(user.id),user.username||"",user.first_name||"Commander"]);
 }
 app.get("/health", async (_req,res)=>{ try { await pool.query("SELECT 1"); res.status(200).json({ok:true,service:"robot-world-war",database:"connected"}); } catch { res.status(503).json({ok:false,service:"robot-world-war",database:"disconnected"}); } });
