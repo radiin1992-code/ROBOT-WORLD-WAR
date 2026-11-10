@@ -141,7 +141,7 @@ app.get("/health", async (_req,res)=>{ try { await pool.query("SELECT 1"); res.s
 app.get("/api/profile",auth,async(req,res)=>{
   await ensurePlayer(req.user);
   const q=await pool.query("SELECT * FROM players WHERE telegram_id=$1",[String(req.user.id)]);
-  const p=q.rows[0]; p.income=Number(120+ p.industry*75 + p.agriculture*45 + p.level*30);p.gdp=Number(p.coins)*4+p.industry*25000;p.population=Number(p.agriculture)*850000+p.industry*120000;
+  const p=q.rows[0]; p.income=Number(Math.max(0,(p.industry-1)*75+(p.agriculture-1)*45+(p.level-1)*30));p.gdp=Number(p.coins)*4;p.population=0;
   res.json({ok:true,profile:p});
 });
 app.get("/api/world",auth,async(_req,res)=>{
@@ -204,7 +204,7 @@ app.get("/api/announcements",auth,async(req,res)=>{
 });
 app.post("/api/announcements",auth,async(req,res)=>{
   const caption=String(req.body?.caption||"").trim(), image=String(req.body?.image||"");
-  if(!image.startsWith("data:image/")||image.length>5500000)return res.status(400).json({ok:false,error:"عکس معتبر نیست یا حجمش زیاده (حداکثر حدود 4 مگابایت)."});
+  if(!image.startsWith("data:image/")||image.length>6100000)return res.status(400).json({ok:false,error:"عکس معتبر نیست یا حجمش زیاده (حداکثر حدود 4 مگابایت)."});
   if(caption.length>1200)return res.status(400).json({ok:false,error:"متن بیانیه خیلی طولانیه."});
   const q=await pool.query("INSERT INTO announcements(telegram_id,caption,image_data) VALUES($1,$2,$3) RETURNING id",[String(req.user.id),caption,image]);
   res.json({ok:true,id:q.rows[0].id});
