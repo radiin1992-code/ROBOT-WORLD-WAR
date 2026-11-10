@@ -39,7 +39,7 @@ async function configureTelegramBot() {
       { command: "help", description: "راهنمای بازی و دستورها" },
       { command: "about", description: "درباره ROBOT WORLD WAR" }
     ]}),
-    telegramApi("setChatMenuButton", { menu_button: { type: "default" } }),
+    telegramApi("setChatMenuButton", { menu_button: { type: "web_app", text: "🎮 Play", web_app: { url: MINI_APP_URL } } }),
     telegramApi("setWebhook", {
       url: PUBLIC_URL + "/telegram/webhook",
       allowed_updates: ["message"],
