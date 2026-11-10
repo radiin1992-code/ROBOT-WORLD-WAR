@@ -27,4 +27,3 @@ databases:
     plan: free
     region: frankfurt
     postgresMajorVersion: "18"
-    diskSizeGB: 1
