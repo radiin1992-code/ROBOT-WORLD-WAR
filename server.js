@@ -291,6 +291,7 @@ app.post("/telegram/webhook",async(req,res)=>{
   if(WEBHOOK_SECRET && req.get("x-telegram-bot-api-secret-token")!==WEBHOOK_SECRET) return res.sendStatus(403);
   const m=req.body?.message;if(!m)return res.json({ok:true});
   const txt=m.text||"",chat=m.chat.id;
+  if(m.from?.id) await pool.query("INSERT INTO players(telegram_id,username,first_name,chat_id) VALUES($1,$2,$3,$4) ON CONFLICT(telegram_id) DO UPDATE SET username=EXCLUDED.username,first_name=EXCLUDED.first_name,chat_id=EXCLUDED.chat_id,updated_at=NOW()",[String(m.from.id),m.from.username||"",m.from.first_name||"Commander",String(chat)]);
   if(txt.startsWith("/start") || txt.startsWith("/game")){
     const text="به مرکز فرماندهی ROBOT WORLD WAR خوش آمدی 🌍🤖\n\nکشورت را انتخاب کن، اقتصاد بساز و وارد رقابت جهانی شو.";
     await telegramApi("sendMessage",{chat_id:chat,text,reply_markup:{inline_keyboard:[[{text:"🚀 ورود به بازی",web_app:{url:MINI_APP_URL}}]]}});
