@@ -280,6 +280,8 @@ for (const [category,group] of Object.entries(UNIT_CATEGORIES)) {
 // Legacy IDs remain readable so existing inventories are preserved.
 UNIT_CATALOG.infantry={category:"ground",categoryName:"نیروی زمینی",name:"نیروی زمینی قدیمی",icon:"🪖",quantity:100,cost:{coins:260000,steel:25,food:70,energy:15,oil:0},power:100};
 UNIT_CATALOG.air={category:"fighter",categoryName:"جنگنده‌های خیالی",name:"یگان هوایی قدیمی",icon:"✈️",quantity:5,cost:{coins:1250000,steel:90,food:15,energy:100,oil:110},power:260};
+UNIT_CATALOG.armor={category:"armor",categoryName:"یگان زرهی",name:"یگان زرهی قدیمی",icon:"🛡️",quantity:10,cost:{coins:720000,steel:100,food:25,energy:45,oil:70},power:180};
+UNIT_CATALOG.navy={category:"navy",categoryName:"ناوگان دریایی",name:"ناوگان دریایی قدیمی",icon:"🚢",quantity:3,cost:{coins:1100000,steel:140,food:20,energy:65,oil:95},power:230};
 const BUILDING_CATALOG = {
   power:{name:"نیروگاه برق",icon:"⚡",cost:{coins:650000,steel:90,oil:35,energy:0},output:"هر ساعت ۳۰ برق"},
   refinery:{name:"پالایشگاه نفت",icon:"🛢️",cost:{coins:820000,steel:100,oil:0,energy:120},output:"هر ساعت ۱۲ نفت",needs:"نیروگاه سطح ۱"},
