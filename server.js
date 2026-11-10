@@ -235,6 +235,8 @@ app.post("/api/groups/:id/members",auth,async(req,res)=>{
   const p=await pool.query("SELECT telegram_id FROM players WHERE telegram_id=$1 AND country_code IS NOT NULL",[target]);
   if(!p.rowCount)return res.status(404).json({ok:false,error:"بازیکن پیدا نشد."});
   await pool.query("INSERT INTO group_members(group_id,telegram_id) VALUES($1,$2) ON CONFLICT DO NOTHING",[id,target]);
+  const inviter=await pool.query("SELECT country_name,first_name FROM players WHERE telegram_id=$1",[String(req.user.id)]);
+  await notifyPlayer(target,"👥 "+(inviter.rows[0]?.country_name||inviter.rows[0]?.first_name)+" تو را به یک گروه در ROBOT WORLD WAR دعوت کرد.","groups",{group:id});
   res.json({ok:true});
 });
 app.get("/api/groups/:id/messages",auth,async(req,res)=>{
