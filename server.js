@@ -164,7 +164,7 @@ app.post("/api/select-country",auth,async(req,res)=>{
     const taken=await client.query("SELECT telegram_id FROM players WHERE country_code=$1",[code]);
     if(taken.rowCount){await client.query("ROLLBACK");return res.status(409).json({ok:false,error:"این کشور قبلاً انتخاب شده است."});}
     await client.query("UPDATE players SET country_code=$1,country_name=$2,country_flag=$3,updated_at=NOW() WHERE telegram_id=$4",[code,name,flag||null,String(req.user.id)]);
-    await client.query("COMMIT");await publishWorldEvent("📣 "+name+" کشور خود را وارد رقابت جهانی کرد.");res.json({ok:true});
+    await client.query("COMMIT");await publishWorldEvent("📣 "+(flag?String.fromCodePoint(127397+flag.charCodeAt(0),127397+flag.charCodeAt(1))+" ":"🌍 ")+name+" کشور خود را وارد رقابت جهانی کرد.");res.json({ok:true});
   }catch(e){await client.query("ROLLBACK");if(e.code==="23505")return res.status(409).json({ok:false,error:"این کشور همین الان توسط فرمانده دیگری انتخاب شد. یک کشور آزاد دیگر انتخاب کن."});throw e}finally{client.release()}
 });
 app.post("/api/upgrade",auth,async(req,res)=>{
@@ -213,8 +213,8 @@ app.post("/api/announcements",auth,async(req,res)=>{
   if(!image.startsWith("data:image/")||image.length>6100000)return res.status(400).json({ok:false,error:"عکس معتبر نیست یا حجمش زیاده (حداکثر حدود 4 مگابایت)."});
   if(caption.length>1200)return res.status(400).json({ok:false,error:"متن بیانیه خیلی طولانیه."});
   const q=await pool.query("INSERT INTO announcements(telegram_id,caption,image_data) VALUES($1,$2,$3) RETURNING id",[String(req.user.id),caption,image]);
-  const author=await pool.query("SELECT country_name,first_name FROM players WHERE telegram_id=$1",[String(req.user.id)]);
-  await publishWorldEvent("📣 "+(author.rows[0]?.country_name||author.rows[0]?.first_name)+" بیانیه تازه‌ای منتشر کرد.","announcements",{report:q.rows[0].id});
+  const author=await pool.query("SELECT country_name,first_name,country_flag FROM players WHERE telegram_id=$1",[String(req.user.id)]);
+  await publishWorldEvent("📣 "+(author.rows[0]?.country_flag?String.fromCodePoint(127397+author.rows[0].country_flag.charCodeAt(0),127397+author.rows[0].country_flag.charCodeAt(1))+" ":"🌍 ")+(author.rows[0]?.country_name||author.rows[0]?.first_name)+" بیانیه تازه‌ای منتشر کرد، فرمانده.","announcements",{report:q.rows[0].id});
   res.json({ok:true,id:q.rows[0].id});
 });
 app.get("/api/groups",auth,async(req,res)=>{
