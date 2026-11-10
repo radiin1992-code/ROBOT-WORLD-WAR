@@ -137,13 +137,14 @@ function renderFallbackWorldMap(el){
   const features=geo.features.filter(f=>f.geometry&&/^[A-Z]{3}$/.test(iso3(f)));
   const paths=features.map(f=>{
     const code=iso3(f),state=code===me?.country_code?"own":claims[code]?"held":"free";
-    const fill=state==="own"?"#e3bd68":state==="held"?"#a56b55":"#245777";\n    return '<path class="world-country '+state+'" style="fill:'+fill+';filter:none" d="'+geomPath(f.geometry)+'"><title>'+cname(f)+(claims[code]?' • دارای فرمانده':'')+'</title></path>';
+    const fill=state==="own"?"#e3bd68":state==="held"?"#a56b55":"#245777";
+    return '<path class="world-country '+state+'" data-country="'+code+'" style="fill:'+fill+';filter:none" d="'+geomPath(f.geometry)+'"><title>'+cname(f)+(claims[code]?' • دارای فرمانده':'')+'</title></path>';
   }).join('');
   const labels=features.filter(f=>claims[iso3(f)]||iso3(f)===me?.country_code).map(f=>{
     const p=countryCenter(f);return '<text class="map-label" x="'+project(p.lng,p.lat)[0].toFixed(1)+'" y="'+project(p.lng,p.lat)[1].toFixed(1)+'">'+flag(iso2(f))+'</text>';
   }).join('');
   el.innerHTML='<div class="map-zoom"><button id="mapZoomIn" aria-label="بزرگ‌نمایی">＋</button><button id="mapZoomOut" aria-label="کوچک‌نمایی">−</button><button id="mapReset" aria-label="بازنشانی">⌖</button></div><div class="globe-hint">نقشهٔ سبک جایگزین • بکش تا جابه‌جا شود • دو انگشت برای زوم</div><svg id="fallbackWorldMap" class="world-map-svg" viewBox="0 0 1000 500" role="img" aria-label="نقشه جهان"><defs><linearGradient id="land" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3b7997"/><stop offset="1" stop-color="#17415f"/></linearGradient></defs><rect width="1000" height="500" fill="#061522"/><g class="map-graticule"><path d="M0 125H1000 M0 250H1000 M0 375H1000 M250 0V500 M500 0V500 M750 0V500"/></g><g id="fallbackWorldLayer">'+paths+labels+'</g></svg>';
-  const svg=$("fallbackWorldMap"),layer=$("fallbackWorldLayer");let view={x:0,y:0,w:1000,h:500},pointers=new Map(),last=null,lastDistance=0;
+  const svg=$("fallbackWorldMap"),layer=$("fallbackWorldLayer");layer.querySelectorAll("[data-country]").forEach(path=>path.addEventListener("click",()=>{const f=features.find(x=>iso3(x)===path.dataset.country);if(f)toast(flag(iso2(f))+" "+cname(f)+(claims[path.dataset.country]?" • فرمانده دارد":" • کشور آزاد"))}));let view={x:0,y:0,w:1000,h:500},pointers=new Map(),last=null,lastDistance=0;
   const apply=()=>svg.setAttribute("viewBox",[view.x,view.y,view.w,view.h].join(" "));
   const zoom=(factor)=>{const nw=Math.max(260,Math.min(1000,view.w*factor)),nh=nw/2,cx=view.x+view.w/2,cy=view.y+view.h/2;view={x:Math.max(0,Math.min(1000-nw,cx-nw/2)),y:Math.max(0,Math.min(500-nh,cy-nh/2)),w:nw,h:nh};apply()};
   svg.addEventListener("pointerdown",e=>{svg.setPointerCapture(e.pointerId);pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});last={x:e.clientX,y:e.clientY};if(pointers.size===2){const a=[...pointers.values()];lastDistance=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)}});
@@ -195,7 +196,7 @@ async function renderWorldMap(){
     if(window.ResizeObserver){let resizeFrame=0;window.radinwarMapResize=new ResizeObserver(()=>{cancelAnimationFrame(resizeFrame);resizeFrame=requestAnimationFrame(()=>{if(!el.isConnected)return;world.width(Math.min(el.clientWidth||600,760)).height(Math.min(el.clientHeight||560,620))})});window.radinwarMapResize.observe(el)}
   }catch(e){
     console.error("3D globe:",e);
-
+    renderFallbackWorldMap(el);
   }
 }
 async function drawGlobe(){if(!geo){await loadGeo();if(!geo)return}await renderWorldMap()}
