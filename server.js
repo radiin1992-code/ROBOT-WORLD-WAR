@@ -85,10 +85,34 @@ async function initDb() {
       telegram_id BIGINT NOT NULL, kind TEXT NOT NULL, level INT NOT NULL DEFAULT 1,
       PRIMARY KEY (telegram_id, kind)
     );
+    CREATE TABLE IF NOT EXISTS military_units (
+      telegram_id BIGINT NOT NULL REFERENCES players(telegram_id) ON DELETE CASCADE,
+      unit_type TEXT NOT NULL, quantity BIGINT NOT NULL DEFAULT 0,
+      PRIMARY KEY(telegram_id,unit_type)
+    );
+    CREATE TABLE IF NOT EXISTS national_buildings (
+      telegram_id BIGINT NOT NULL REFERENCES players(telegram_id) ON DELETE CASCADE,
+      building_type TEXT NOT NULL, level INT NOT NULL DEFAULT 0,
+      PRIMARY KEY(telegram_id,building_type)
+    );
+    CREATE TABLE IF NOT EXISTS diplomacy (
+      id BIGSERIAL PRIMARY KEY,
+      from_id BIGINT NOT NULL REFERENCES players(telegram_id) ON DELETE CASCADE,
+      to_id BIGINT NOT NULL REFERENCES players(telegram_id) ON DELETE CASCADE,
+      kind TEXT NOT NULL CHECK(kind IN ('alliance','war')),
+      status TEXT NOT NULL CHECK(status IN ('pending','active','rejected','ended')),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CHECK(from_id<>to_id)
+    );
+    CREATE INDEX IF NOT EXISTS diplomacy_players_idx ON diplomacy(from_id,to_id,status);
+    CREATE INDEX IF NOT EXISTS diplomacy_target_idx ON diplomacy(to_id,status);
+
   `);
   await pool.query("ALTER TABLE players ADD COLUMN IF NOT EXISTS energy_level INT NOT NULL DEFAULT 1");
   await pool.query("ALTER TABLE players ADD COLUMN IF NOT EXISTS chat_id BIGINT");
   await pool.query("ALTER TABLE players ADD COLUMN IF NOT EXISTS country_flag TEXT");
+  await pool.query("ALTER TABLE players ADD COLUMN IF NOT EXISTS production_at TIMESTAMPTZ NOT NULL DEFAULT NOW()");
   await pool.query(`
     CREATE TABLE IF NOT EXISTS game_groups (
       id BIGSERIAL PRIMARY KEY, name TEXT NOT NULL, owner_id BIGINT NOT NULL REFERENCES players(telegram_id),
@@ -151,6 +175,7 @@ async function ensurePlayer(user) {
 app.get("/health", async (_req,res)=>{ try { await pool.query("SELECT 1"); res.status(200).json({ok:true,service:"robot-world-war",database:"connected"}); } catch { res.status(503).json({ok:false,service:"robot-world-war",database:"disconnected"}); } });
 app.get("/api/profile",auth,async(req,res)=>{
   await ensurePlayer(req.user);
+  await applyProduction(req.user.id);
   const q=await pool.query("SELECT * FROM players WHERE telegram_id=$1",[String(req.user.id)]);
   const p=q.rows[0]; p.income=Number(Math.max(0,(p.industry-1)*75+(p.agriculture-1)*45+(p.level-1)*30));p.gdp=Number(p.coins)*4;p.population=0;
   res.json({ok:true,profile:p});
@@ -222,6 +247,144 @@ app.post("/api/owner/resource",auth,ownerOnly,async(req,res)=>{
   if(!q.rowCount)return res.status(404).json({ok:false,error:"بازیکن پیدا نشد"});
   await pool.query("INSERT INTO admin_logs(owner_id,target_id,action,details) VALUES($1,$2,'add_resource',$3)",[OWNER_ID,target,JSON.stringify({resource,amount})]);
   await pool.query("INSERT INTO transactions(telegram_id,kind,resource,amount) VALUES($1,'admin',$2,$3)",[target,resource,amount]);res.json({ok:true});
+});
+
+
+const UNIT_CATALOG = {
+  infantry:{name:"نیروی زمینی",icon:"🪖",quantity:100,cost:{coins:260000,steel:25,food:70,energy:15,oil:0},power:100},
+  armor:{name:"یگان زرهی",icon:"🛡️",quantity:10,cost:{coins:720000,steel:100,food:25,energy:45,oil:70},power:180},
+  air:{name:"یگان هوایی",icon:"✈️",quantity:5,cost:{coins:1250000,steel:90,food:15,energy:100,oil:110},power:260},
+  navy:{name:"ناوگان دریایی",icon:"🚢",quantity:3,cost:{coins:1100000,steel:140,food:20,energy:65,oil:95},power:230}
+};
+const BUILDING_CATALOG = {
+  power:{name:"نیروگاه برق",icon:"⚡",cost:{coins:650000,steel:90,oil:35,energy:0},output:"هر ساعت ۳۰ برق"},
+  refinery:{name:"پالایشگاه نفت",icon:"🛢️",cost:{coins:820000,steel:100,oil:0,energy:120},output:"هر ساعت ۱۲ نفت",needs:"نیروگاه سطح ۱"},
+  steelworks:{name:"کارخانه فولاد",icon:"🏭",cost:{coins:950000,steel:60,oil:45,energy:150},output:"هر ساعت ۱۰ فولاد",needs:"نیروگاه سطح ۱"},
+  farm:{name:"مزرعه صنعتی",icon:"🌾",cost:{coins:480000,steel:35,oil:0,energy:55},output:"هر ساعت ۱۸ غذا",needs:"نیروگاه سطح ۱"}
+};
+async function applyProduction(id){
+  const client=await pool.connect();
+  try{
+    await client.query("BEGIN");
+    const p=await client.query("SELECT energy,oil,steel,food,production_at FROM players WHERE telegram_id=$1 FOR UPDATE",[String(id)]);
+    if(!p.rowCount){await client.query("ROLLBACK");return}
+    const b=await client.query("SELECT building_type,level FROM national_buildings WHERE telegram_id=$1",[String(id)]);
+    const levels=Object.fromEntries(b.rows.map(x=>[x.building_type,Number(x.level)]));
+    const hours=Math.max(0,Math.min(24,(Date.now()-new Date(p.rows[0].production_at).getTime())/3600000));
+    if(hours>=0.02){
+      let energy=Number(p.rows[0].energy),oil=Number(p.rows[0].oil),steel=Number(p.rows[0].steel),food=Number(p.rows[0].food);
+      energy+=hours*(levels.power||0)*30;
+      const refinery=Math.min(levels.refinery||0,Math.floor(energy/(hours*4||1)));
+      const steelworks=Math.min(levels.steelworks||0,Math.floor(energy/(hours*6||1)));
+      const farm=Math.min(levels.farm||0,Math.floor(energy/(hours*3||1)));
+      const used=hours*(refinery*4+steelworks*6+farm*3);
+      energy=Math.max(0,energy-used);
+      oil+=hours*refinery*12;steel+=hours*steelworks*10;food+=hours*farm*18;
+      await client.query("UPDATE players SET energy=$1,oil=$2,steel=$3,food=$4,production_at=NOW() WHERE telegram_id=$5",[Math.floor(energy),Math.floor(oil),Math.floor(steel),Math.floor(food),String(id)]);
+    }
+    await client.query("COMMIT");
+  }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
+}
+app.get("/api/army",auth,async(req,res)=>{
+  await applyProduction(req.user.id);
+  const [p,u,b]=await Promise.all([
+    pool.query("SELECT coins,oil,steel,food,energy FROM players WHERE telegram_id=$1",[String(req.user.id)]),
+    pool.query("SELECT unit_type,quantity FROM military_units WHERE telegram_id=$1",[String(req.user.id)]),
+    pool.query("SELECT building_type,level FROM national_buildings WHERE telegram_id=$1",[String(req.user.id)])
+  ]);
+  const units=Object.fromEntries(u.rows.map(x=>[x.unit_type,Number(x.quantity)]));
+  const buildings=Object.fromEntries(b.rows.map(x=>[x.building_type,Number(x.level)]));
+  res.json({ok:true,resources:p.rows[0],units,buildings,unitCatalog:UNIT_CATALOG,buildingCatalog:BUILDING_CATALOG});
+});
+app.post("/api/army/recruit",auth,async(req,res)=>{
+  const type=req.body?.type,item=UNIT_CATALOG[type];if(!item)return res.status(400).json({ok:false,error:"نوع یگان معتبر نیست."});
+  const c=item.cost,client=await pool.connect();
+  try{
+    await client.query("BEGIN");
+    const q=await client.query("UPDATE players SET coins=coins-$1,steel=steel-$2,food=food-$3,energy=energy-$4,oil=oil-$5,updated_at=NOW() WHERE telegram_id=$6 AND country_code IS NOT NULL AND coins >= $1 AND steel >= $2 AND food >= $3 AND energy >= $4 AND oil >= $5 RETURNING telegram_id",
+      [c.coins,c.steel,c.food,c.energy,c.oil,String(req.user.id)]);
+    if(!q.rowCount){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"منابع کافی نیست. هزینه و موجودی منابع را بررسی کن."})}
+    await client.query("INSERT INTO military_units(telegram_id,unit_type,quantity) VALUES($1,$2,$3) ON CONFLICT(telegram_id,unit_type) DO UPDATE SET quantity=military_units.quantity+EXCLUDED.quantity",[String(req.user.id),type,item.quantity]);
+    await client.query("INSERT INTO transactions(telegram_id,kind,resource,amount) VALUES($1,'recruit',$2,$3)",[String(req.user.id),type,item.quantity]);
+    await client.query("COMMIT");
+    await publishWorldEvent("🛡️ "+item.name+" به ساختار دفاعی یک کشور اضافه شد.");
+    res.json({ok:true});
+  }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
+});
+app.post("/api/army/build",auth,async(req,res)=>{
+  const type=req.body?.type,item=BUILDING_CATALOG[type];if(!item)return res.status(400).json({ok:false,error:"نوع زیرساخت معتبر نیست."});
+  const client=await pool.connect(),c=item.cost;
+  try{
+    await client.query("BEGIN");
+    const levels=await client.query("SELECT level FROM national_buildings WHERE telegram_id=$1 AND building_type='power'",[String(req.user.id)]);
+    if(type!=="power"&&Number(levels.rows[0]?.level||0)<1){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"اول باید نیروگاه بسازی تا برق موردنیاز زیرساخت فراهم شود."})}
+    const q=await client.query("UPDATE players SET coins=coins-$1,steel=steel-$2,oil=oil-$3,energy=energy-$4,updated_at=NOW() WHERE telegram_id=$5 AND country_code IS NOT NULL AND coins >= $1 AND steel >= $2 AND oil >= $3 AND energy >= $4 RETURNING telegram_id",[c.coins,c.steel,c.oil,c.energy,String(req.user.id)]);
+    if(!q.rowCount){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"منابع لازم برای ساخت این زیرساخت کافی نیست."})}
+    await client.query("INSERT INTO national_buildings(telegram_id,building_type,level) VALUES($1,$2,1) ON CONFLICT(telegram_id,building_type) DO UPDATE SET level=national_buildings.level+1",[String(req.user.id),type]);
+    await client.query("COMMIT");
+    const p=await pool.query("SELECT country_name FROM players WHERE telegram_id=$1",[String(req.user.id)]);
+    await publishWorldEvent("🏗️ "+(p.rows[0]?.country_name||"یک کشور")+" زیرساخت «"+item.name+"» را توسعه داد.");
+    res.json({ok:true});
+  }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
+});
+app.get("/api/diplomacy",auth,async(req,res)=>{
+  const id=String(req.user.id);
+  const q=await pool.query(`SELECT d.id,d.from_id,d.to_id,d.kind,d.status,d.created_at,
+    a.country_name AS from_country,a.country_flag AS from_flag,b.country_name AS to_country,b.country_flag AS to_flag
+    FROM diplomacy d JOIN players a ON a.telegram_id=d.from_id JOIN players b ON b.telegram_id=d.to_id
+    WHERE (d.from_id=$1 OR d.to_id=$1) AND d.status IN ('pending','active')
+    ORDER BY d.id DESC LIMIT 100`,[id]);
+  const p=await pool.query("SELECT telegram_id,country_name,country_flag FROM players WHERE country_code IS NOT NULL AND telegram_id<>$1 ORDER BY country_name",[id]);
+  res.json({ok:true,relations:q.rows,players:p.rows});
+});
+app.post("/api/diplomacy",auth,async(req,res)=>{
+  const action=req.body?.action,target=String(req.body?.target_id||"");
+  if(!/^\d{5,20}$/.test(target)||target===String(req.user.id))return res.status(400).json({ok:false,error:"کشور مقصد معتبر نیست."});
+  const own=await pool.query("SELECT country_name,country_flag FROM players WHERE telegram_id=$1 AND country_code IS NOT NULL",[String(req.user.id)]);
+  const other=await pool.query("SELECT country_name,country_flag,chat_id FROM players WHERE telegram_id=$1 AND country_code IS NOT NULL",[target]);
+  if(!own.rowCount||!other.rowCount)return res.status(404).json({ok:false,error:"هر دو طرف باید کشور انتخاب کرده باشند."});
+  if(action==="alliance"||action==="war"){
+    const kind=action;
+    if(kind==="war"){
+      const allied=await pool.query("SELECT 1 FROM diplomacy WHERE kind='alliance' AND status='active' AND ((from_id=$1 AND to_id=$2) OR (from_id=$2 AND to_id=$1))",[String(req.user.id),target]);
+      if(allied.rowCount)return res.status(400).json({ok:false,error:"تا وقتی اتحاد فعال است، ابتدا باید آن را پایان بدهید."});
+    }
+    const existing=await pool.query("SELECT id FROM diplomacy WHERE kind=$1 AND status IN ('pending','active') AND ((from_id=$2 AND to_id=$3) OR (from_id=$3 AND to_id=$2)) LIMIT 1",[kind,String(req.user.id),target]);
+    if(existing.rowCount)return res.status(409).json({ok:false,error:"برای این دو کشور، درخواست یا وضعیت فعالی وجود دارد."});
+    const status=kind==="war"?"active":"pending";
+    const q=await pool.query("INSERT INTO diplomacy(from_id,to_id,kind,status) VALUES($1,$2,$3,$4) RETURNING id",[String(req.user.id),target,kind,status]);
+    const from=own.rows[0].country_name||"یک کشور",to=other.rows[0].country_name||"کشور دیگر";
+    const message=kind==="war"?"⚔️ "+from+" رسماً وضعیت جنگ با "+to+" را اعلام کرد.":"🤝 "+from+" پیشنهاد اتحاد رسمی برای "+to+" فرستاد.";
+    const id=q.rows[0].id;
+    await publishWorldEvent(message,"diplomacy",{report:id});
+    if(kind==="alliance")await notifyPlayer(target,"🤝 "+from+" برای کشور شما پیشنهاد اتحاد فرستاد.","diplomacy",{report:id});
+    else await notifyPlayer(target,"⚔️ "+from+" وضعیت جنگ با کشور شما را اعلام کرد.","diplomacy",{report:id});
+    return res.json({ok:true,id});
+  }
+  if(action==="respond"){
+    const relationId=Number(req.body?.relation_id),decision=req.body?.decision;
+    if(!Number.isSafeInteger(relationId)||!["accept","reject","peace"].includes(decision))return res.status(400).json({ok:false,error:"پاسخ دیپلماتیک معتبر نیست."});
+    const relation=await pool.query("SELECT * FROM diplomacy WHERE id=$1 AND to_id=$2 AND status IN ('pending','active')",[relationId,String(req.user.id)]);
+    if(!relation.rowCount)return res.status(404).json({ok:false,error:"درخواست فعال پیدا نشد."});
+    const r=relation.rows[0];
+    if(r.kind==="alliance"&&r.status==="pending"){
+      const status=decision==="accept"?"active":"rejected";
+      await pool.query("UPDATE diplomacy SET status=$1,updated_at=NOW() WHERE id=$2",[status,relationId]);
+      const msg=decision==="accept"?"🤝 اتحاد رسمی دو کشور پذیرفته شد.":"📨 پیشنهاد اتحاد رد شد.";
+      await publishWorldEvent(msg,"diplomacy",{report:relationId});
+      await notifyPlayer(r.from_id,msg,"diplomacy",{report:relationId});
+      return res.json({ok:true});
+    }
+    if(r.kind==="war"&&decision==="peace"){
+      await pool.query("UPDATE diplomacy SET status='ended',updated_at=NOW() WHERE id=$1",[relationId]);
+      const msg="🕊️ دو کشور به آتش‌بس رسیدند و وضعیت جنگ پایان یافت.";
+      await publishWorldEvent(msg,"diplomacy",{report:relationId});
+      await notifyPlayer(r.from_id,msg,"diplomacy",{report:relationId});
+      return res.json({ok:true});
+    }
+    return res.status(400).json({ok:false,error:"این پاسخ برای این وضعیت مناسب نیست."});
+  }
+  res.status(400).json({ok:false,error:"فرمان دیپلماتیک ناشناخته است."});
 });
 
 app.get("/api/players",auth,async(req,res)=>{
