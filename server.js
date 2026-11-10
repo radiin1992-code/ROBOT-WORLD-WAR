@@ -127,7 +127,7 @@ app.post("/api/select-country",auth,async(req,res)=>{
     if(taken.rowCount){await client.query("ROLLBACK");return res.status(409).json({ok:false,error:"این کشور قبلاً انتخاب شده است."});}
     await client.query("UPDATE players SET country_code=$1,country_name=$2,updated_at=NOW() WHERE telegram_id=$3",[code,name,String(req.user.id)]);
     await client.query("INSERT INTO world_news(message) VALUES($1)",[`کشور ${name} وارد رقابت جهانی شد.`]);await client.query("COMMIT");res.json({ok:true});
-  }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
+  }catch(e){await client.query("ROLLBACK");if(e.code==="23505")return res.status(409).json({ok:false,error:"این کشور همین الان توسط فرمانده دیگری انتخاب شد. یک کشور آزاد دیگر انتخاب کن."});throw e}finally{client.release()}
 });
 app.post("/api/upgrade",auth,async(req,res)=>{
   const {kind}=req.body||{}, costs={industry:{coins:1800,steel:120},energy:{coins:1500,oil:80},technology:{coins:3000,steel:180},agriculture:{coins:1300,food:100}};
