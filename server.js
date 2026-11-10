@@ -177,8 +177,8 @@ app.get("/api/profile",auth,async(req,res)=>{
   await applyProduction(req.user.id);
   const q=await pool.query("SELECT * FROM players WHERE telegram_id=$1",[String(req.user.id)]);
   const p=q.rows[0];
-  const military=await pool.query("SELECT COALESCE(SUM(m.quantity * CASE m.unit_type WHEN 'infantry' THEN 100 WHEN 'armor' THEN 180 WHEN 'air' THEN 260 WHEN 'navy' THEN 230 ELSE 0 END),0)::bigint AS power FROM military_units m WHERE m.telegram_id=$1",[String(req.user.id)]);
-  p.military_power=Number(military.rows[0]?.power||0);
+  const military=await pool.query("SELECT unit_type,quantity FROM military_units WHERE telegram_id=$1",[String(req.user.id)]);
+  p.military_power=military.rows.reduce((sum,row)=>sum+Number(row.quantity||0)*Number(UNIT_CATALOG[row.unit_type]?.power||0),0);
   p.income=Number(Math.max(0,(p.industry-1)*75+(p.agriculture-1)*45+(p.level-1)*30));p.gdp=Number(p.coins)*4;p.population=0;
   res.json({ok:true,profile:p});
 });
@@ -252,12 +252,34 @@ app.post("/api/owner/resource",auth,ownerOnly,async(req,res)=>{
 });
 
 
-const UNIT_CATALOG = {
-  infantry:{name:"نیروی زمینی",icon:"🪖",quantity:100,cost:{coins:260000,steel:25,food:70,energy:15,oil:0},power:100},
-  armor:{name:"یگان زرهی",icon:"🛡️",quantity:10,cost:{coins:720000,steel:100,food:25,energy:45,oil:70},power:180},
-  air:{name:"یگان هوایی",icon:"✈️",quantity:5,cost:{coins:1250000,steel:90,food:15,energy:100,oil:110},power:260},
-  navy:{name:"ناوگان دریایی",icon:"🚢",quantity:3,cost:{coins:1100000,steel:140,food:20,energy:65,oil:95},power:230}
+const UNIT_CATEGORIES = {
+  ground:{name:"نیروی زمینی",icon:"🪖",prefix:"نگهبان",base:{coins:210000,steel:18,food:50,energy:12,oil:0},power:100,quantity:100},
+  armor:{name:"یگان زرهی",icon:"🛡️",prefix:"دژ",base:{coins:520000,steel:75,food:18,energy:38,oil:48},power:180,quantity:8},
+  fighter:{name:"جنگنده‌های خیالی",icon:"✈️",prefix:"شاهین",base:{coins:820000,steel:58,food:10,energy:72,oil:78},power:260,quantity:4},
+  air_defense:{name:"پدافند بازی",icon:"🛰️",prefix:"سپهر",base:{coins:730000,steel:68,food:12,energy:62,oil:52},power:245,quantity:4},
+  navy:{name:"ناوگان دریایی",icon:"🚢",prefix:"موج",base:{coins:930000,steel:112,food:18,energy:54,oil:84},power:230,quantity:2},
+  recon:{name:"شناسایی",icon:"📡",prefix:"دیدبان",base:{coins:430000,steel:36,food:12,energy:42,oil:28},power:135,quantity:6},
+  support:{name:"پشتیبانی",icon:"🚚",prefix:"پشتیبان",base:{coins:540000,steel:46,food:24,energy:48,oil:34},power:155,quantity:5},
+  rocket:{name:"واحدهای پرتابی خیالی",icon:"🚀",prefix:"ستاره",base:{coins:980000,steel:82,food:8,energy:92,oil:88},power:285,quantity:2}
 };
+const UNIT_CATALOG = {};
+for (const [category,group] of Object.entries(UNIT_CATEGORIES)) {
+  for (let tier=1;tier<=50;tier++) {
+    const t=(tier-1)/49,priceScale=1+29*Math.pow(t,1.45),powerScale=1+8*Math.pow(t,1.15);
+    const id=category+"_"+String(tier).padStart(2,"0");
+    UNIT_CATALOG[id]={
+      category,categoryName:group.name,tier,
+      name:group.prefix+" "+String(tier).padStart(2,"0"),
+      icon:group.icon,rarity:tier>=46?"افسانه‌ای":tier>=36?"حماسی":tier>=21?"کمیاب":tier>=11?"پیشرفته":"معمولی",
+      quantity:Math.max(1,Math.round(group.quantity/(1+(tier-1)/14))),
+      cost:Object.fromEntries(Object.entries(group.base).map(([k,v])=>[k,Math.round(v*priceScale)])),
+      power:Math.round(group.power*powerScale)
+    };
+  }
+}
+// Legacy IDs remain readable so existing inventories are preserved.
+UNIT_CATALOG.infantry={category:"ground",categoryName:"نیروی زمینی",name:"نیروی زمینی قدیمی",icon:"🪖",quantity:100,cost:{coins:260000,steel:25,food:70,energy:15,oil:0},power:100};
+UNIT_CATALOG.air={category:"fighter",categoryName:"جنگنده‌های خیالی",name:"یگان هوایی قدیمی",icon:"✈️",quantity:5,cost:{coins:1250000,steel:90,food:15,energy:100,oil:110},power:260};
 const BUILDING_CATALOG = {
   power:{name:"نیروگاه برق",icon:"⚡",cost:{coins:650000,steel:90,oil:35,energy:0},output:"هر ساعت ۳۰ برق"},
   refinery:{name:"پالایشگاه نفت",icon:"🛢️",cost:{coins:820000,steel:100,oil:0,energy:120},output:"هر ساعت ۱۲ نفت",needs:"نیروگاه سطح ۱"},
@@ -296,7 +318,7 @@ app.get("/api/army",auth,async(req,res)=>{
   ]);
   const units=Object.fromEntries(u.rows.map(x=>[x.unit_type,Number(x.quantity)]));
   const buildings=Object.fromEntries(b.rows.map(x=>[x.building_type,Number(x.level)]));
-  res.json({ok:true,resources:p.rows[0],units,buildings,unitCatalog:UNIT_CATALOG,buildingCatalog:BUILDING_CATALOG});
+  res.json({ok:true,resources:p.rows[0],units,buildings,unitCategories:UNIT_CATEGORIES,unitCatalog:UNIT_CATALOG,buildingCatalog:BUILDING_CATALOG});
 });
 app.post("/api/army/recruit",auth,async(req,res)=>{
   const type=req.body?.type,item=UNIT_CATALOG[type];if(!item)return res.status(400).json({ok:false,error:"نوع یگان معتبر نیست."});
