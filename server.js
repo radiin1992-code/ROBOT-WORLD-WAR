@@ -163,7 +163,7 @@ app.post("/api/select-country",auth,async(req,res)=>{
     const taken=await client.query("SELECT telegram_id FROM players WHERE country_code=$1",[code]);
     if(taken.rowCount){await client.query("ROLLBACK");return res.status(409).json({ok:false,error:"این کشور قبلاً انتخاب شده است."});}
     await client.query("UPDATE players SET country_code=$1,country_name=$2,updated_at=NOW() WHERE telegram_id=$3",[code,name,String(req.user.id)]);
-    await client.query("INSERT INTO world_news(message) VALUES($1)",[`کشور ${name} وارد رقابت جهانی شد.`]);await publishWorldEvent("📣 "+name+" کشور خود را وارد رقابت جهانی کرد.");await client.query("COMMIT");res.json({ok:true});
+    await client.query("COMMIT");await publishWorldEvent("📣 "+name+" کشور خود را وارد رقابت جهانی کرد.");res.json({ok:true});
   }catch(e){await client.query("ROLLBACK");if(e.code==="23505")return res.status(409).json({ok:false,error:"این کشور همین الان توسط فرمانده دیگری انتخاب شد. یک کشور آزاد دیگر انتخاب کن."});throw e}finally{client.release()}
 });
 app.post("/api/upgrade",auth,async(req,res)=>{
@@ -299,6 +299,9 @@ app.post("/telegram/webhook",async(req,res)=>{
     await telegramApi("sendMessage",{chat_id:chat,text,reply_markup:{inline_keyboard:[[{text:"🚀 ورود به بازی",web_app:{url:MINI_APP_URL}}]]}});
   } else if(txt.startsWith("/help")){
     await telegramApi("sendMessage",{chat_id:chat,text:"راهنمای ROBOT WORLD WAR\n/start یا /game : ورود به بازی\n/about : درباره بازی\n/help : راهنما",reply_markup:{inline_keyboard:[[{text:"🌍 باز کردن Mini App",web_app:{url:MINI_APP_URL}}]]}});
+  } else if(txt && !txt.startsWith("/") && String(from?.id)!==OWNER_ID){
+    await telegramApi("sendMessage",{chat_id:OWNER_ID,text:"📩 پیام تازه به ربات از "+(from?.first_name||"کاربر")+" (@"+(from?.username||"بدون نام کاربری")+"):\n\n"+txt,reply_markup:{inline_keyboard:[[{text:"🌍 باز کردن بازی",web_app:{url:APP_LINK("market")}}]]}});
+    await telegramApi("sendMessage",{chat_id:chat,text:"پیامت به مرکز فرماندهی رسید. 📡"});
   } else if(txt.startsWith("/about")){
     await telegramApi("sendMessage",{chat_id:chat,text:"ROBOT WORLD WAR یک بازی استراتژیک آنلاین با نقشه جهان، مدیریت اقتصاد و رقابت میان کشورهاست.",reply_markup:{inline_keyboard:[[{text:"🚀 ورود به بازی",web_app:{url:MINI_APP_URL}}]]}});
   }
