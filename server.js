@@ -212,6 +212,8 @@ app.post("/api/announcements",auth,async(req,res)=>{
   if(!image.startsWith("data:image/")||image.length>6100000)return res.status(400).json({ok:false,error:"عکس معتبر نیست یا حجمش زیاده (حداکثر حدود 4 مگابایت)."});
   if(caption.length>1200)return res.status(400).json({ok:false,error:"متن بیانیه خیلی طولانیه."});
   const q=await pool.query("INSERT INTO announcements(telegram_id,caption,image_data) VALUES($1,$2,$3) RETURNING id",[String(req.user.id),caption,image]);
+  const author=await pool.query("SELECT country_name,first_name FROM players WHERE telegram_id=$1",[String(req.user.id)]);
+  await publishWorldEvent("📣 "+(author.rows[0]?.country_name||author.rows[0]?.first_name)+" بیانیه تازه‌ای منتشر کرد.","announcements",{report:q.rows[0].id});
   res.json({ok:true,id:q.rows[0].id});
 });
 app.get("/api/groups",auth,async(req,res)=>{
