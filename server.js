@@ -13,6 +13,43 @@ const PUBLIC_URL = process.env.RENDER_EXTERNAL_URL || (process.env.RAILWAY_PUBLI
 const MINI_APP_URL = process.env.MINI_APP_URL || PUBLIC_URL;
 const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || "";
 
+async function telegramApi(method, payload) {
+  if (!BOT_TOKEN) return { ok: false, description: "BOT_TOKEN is not configured" };
+  const response = await fetch("https://api.telegram.org/bot" + BOT_TOKEN + "/" + method, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  const result = await response.json().catch(() => ({ ok: false, description: "Invalid Telegram response" }));
+  if (!response.ok || !result.ok) console.error("Telegram setup failed:", method, result.description || response.status);
+  return result;
+}
+async function configureTelegramBot() {
+  if (!BOT_TOKEN || !MINI_APP_URL || !MINI_APP_URL.startsWith("https://")) {
+    console.error("Telegram setup skipped: BOT_TOKEN or HTTPS MINI_APP_URL is missing");
+    return;
+  }
+  await Promise.all([
+    telegramApi("setMyName", { name: "ROBOT WORLD WAR" }),
+    telegramApi("setMyDescription", { description: "فرماندهی کشور خودت را به دست بگیر، اقتصاد بساز، با دیگر کشورها مذاکره کن و در نقشه زنده جهان رقابت کن." }),
+    telegramApi("setMyShortDescription", { short_description: "بازی استراتژیک آنلاین مدیریت کشور و رقابت جهانی 🌍" }),
+    telegramApi("setMyCommands", { commands: [
+      { command: "start", description: "شروع بازی و ورود به نقشه جهان" },
+      { command: "game", description: "نمایش دکمه ورود به بازی" },
+      { command: "help", description: "راهنمای بازی و دستورها" },
+      { command: "about", description: "درباره ROBOT WORLD WAR" }
+    ]}),
+    telegramApi("setChatMenuButton", { menu_button: {
+      type: "web_app", text: "ورود به بازی", web_app: { url: MINI_APP_URL }
+    }}),
+    telegramApi("setWebhook", {
+      url: PUBLIC_URL + "/telegram/webhook",
+      allowed_updates: ["message"],
+      ...(WEBHOOK_SECRET ? { secret_token: WEBHOOK_SECRET } : {})
+    })
+  ]);
+}
+
 async function initDb() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS players (
@@ -129,19 +166,19 @@ app.post("/telegram/webhook",async(req,res)=>{
   if(WEBHOOK_SECRET && req.get("x-telegram-bot-api-secret-token")!==WEBHOOK_SECRET) return res.sendStatus(403);
   const m=req.body?.message;if(!m)return res.json({ok:true});
   const txt=m.text||"",chat=m.chat.id;
-  if(txt.startsWith("/start")){const text="به مرکز فرماندهی ROBOT WORLD WAR خوش آمدی 🌍🤖";
-    const payload={chat_id:chat,text,reply_markup:{inline_keyboard:[[{text:"🚀 ورود به بازی",web_app:{url:MINI_APP_URL}}]]}};
-    if(BOT_TOKEN&&MINI_APP_URL)await fetch("https://api.telegram.org/bot"+BOT_TOKEN+"/sendMessage",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
-  }else if(txt==="/help"&&BOT_TOKEN){await fetch("https://api.telegram.org/bot"+BOT_TOKEN+"/sendMessage",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({chat_id:chat,text:"/start ورود به بازی"})})}
+  if(txt.startsWith("/start") || txt.startsWith("/game")){
+    const text="به مرکز فرماندهی ROBOT WORLD WAR خوش آمدی 🌍🤖\n\nکشورت را انتخاب کن، اقتصاد بساز و وارد رقابت جهانی شو.";
+    await telegramApi("sendMessage",{chat_id:chat,text,reply_markup:{inline_keyboard:[[{text:"🚀 ورود به بازی",web_app:{url:MINI_APP_URL}}]]}});
+  } else if(txt.startsWith("/help")){
+    await telegramApi("sendMessage",{chat_id:chat,text:"راهنمای ROBOT WORLD WAR\n/start یا /game : ورود به بازی\n/about : درباره بازی\n/help : راهنما",reply_markup:{inline_keyboard:[[{text:"🌍 باز کردن Mini App",web_app:{url:MINI_APP_URL}}]]}});
+  } else if(txt.startsWith("/about")){
+    await telegramApi("sendMessage",{chat_id:chat,text:"ROBOT WORLD WAR یک بازی استراتژیک آنلاین با نقشه جهان، مدیریت اقتصاد و رقابت میان کشورهاست.",reply_markup:{inline_keyboard:[[{text:"🚀 ورود به بازی",web_app:{url:MINI_APP_URL}}]]}});
+  }
   res.json({ok:true});
 });
 app.get("*",(req,res)=>res.sendFile(process.cwd()+"/public/index.html"));
 const port=process.env.PORT||3000;
 initDb().then(()=>app.listen(port,async()=>{
   console.log("ROBOT WORLD WAR online on "+port);
-  if(BOT_TOKEN && PUBLIC_URL){
-    const payload={url:PUBLIC_URL+"/telegram/webhook",allowed_updates:["message"]};
-    if(WEBHOOK_SECRET)payload.secret_token=WEBHOOK_SECRET;
-    try{await fetch("https://api.telegram.org/bot"+BOT_TOKEN+"/setWebhook",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});}catch(e){console.error("Telegram webhook setup failed");}
-  }
+  await configureTelegramBot();
 })).catch(e=>{console.error("Database initialization failed",e);process.exit(1)});
