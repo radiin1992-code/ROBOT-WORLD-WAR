@@ -156,14 +156,14 @@ app.get("/api/world",auth,async(_req,res)=>{
   res.json({ok:true,claimed,news:news.rows});
 });
 app.post("/api/select-country",auth,async(req,res)=>{
-  const {code,name}=req.body||{};
-  if(!/^[A-Z]{3}$/.test(code||"")||typeof name!=="string"||name.length>90)return res.status(400).json({ok:false,error:"کشور معتبر نیست"});
+  const {code,name,flag}=req.body||{};
+  if(!/^[A-Z]{3}$/.test(code||"")||typeof name!=="string"||name.length>90||(flag&&!/^[A-Z]{2}$/.test(flag)))return res.status(400).json({ok:false,error:"کشور معتبر نیست"});
   const client=await pool.connect();
   try{await client.query("BEGIN");const own=await client.query("SELECT country_code FROM players WHERE telegram_id=$1 FOR UPDATE",[String(req.user.id)]);
     if(own.rows[0]?.country_code){await client.query("ROLLBACK");return res.status(409).json({ok:false,error:"شما قبلاً کشور انتخاب کرده‌ای."});}
     const taken=await client.query("SELECT telegram_id FROM players WHERE country_code=$1",[code]);
     if(taken.rowCount){await client.query("ROLLBACK");return res.status(409).json({ok:false,error:"این کشور قبلاً انتخاب شده است."});}
-    await client.query("UPDATE players SET country_code=$1,country_name=$2,updated_at=NOW() WHERE telegram_id=$3",[code,name,String(req.user.id)]);
+    await client.query("UPDATE players SET country_code=$1,country_name=$2,country_flag=$3,updated_at=NOW() WHERE telegram_id=$4",[code,name,flag||null,String(req.user.id)]);
     await client.query("COMMIT");await publishWorldEvent("📣 "+name+" کشور خود را وارد رقابت جهانی کرد.");res.json({ok:true});
   }catch(e){await client.query("ROLLBACK");if(e.code==="23505")return res.status(409).json({ok:false,error:"این کشور همین الان توسط فرمانده دیگری انتخاب شد. یک کشور آزاد دیگر انتخاب کن."});throw e}finally{client.release()}
 });
@@ -201,7 +201,7 @@ app.post("/api/owner/resource",auth,ownerOnly,async(req,res)=>{
 
 app.get("/api/players",auth,async(req,res)=>{
   await ensurePlayer(req.user);
-  const q=await pool.query("SELECT telegram_id,first_name,username,country_name,country_code FROM players WHERE country_code IS NOT NULL AND telegram_id<>$1 ORDER BY first_name LIMIT 300",[String(req.user.id)]);
+  const q=await pool.query("SELECT telegram_id,first_name,username,country_name,country_code,country_flag FROM players WHERE country_code IS NOT NULL AND telegram_id<>$1 ORDER BY first_name LIMIT 300",[String(req.user.id)]);
   res.json({ok:true,players:q.rows});
 });
 app.get("/api/announcements",auth,async(req,res)=>{
