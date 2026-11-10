@@ -39,7 +39,7 @@ const GEO_URL='https://raw.githubusercontent.com/datasets/geo-countries/master/d
 const mapStyle={version:8,sources:{carto:{type:'raster',tiles:['https://a.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png','https://b.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png','https://c.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png'],tileSize:256,attribution:'© OpenStreetMap © CARTO'}},layers:[{id:'basemap',type:'raster',source:'carto'}],projection:{type:'globe'}};
 function toast(t){$('toast').textContent=t;$('toast').classList.add('show');setTimeout(()=>$('toast').classList.remove('show'),2600)}
 function headers(){return {'content-type':'application/json','x-telegram-init-data':tg?.initData||''}}
-async function api(path,body){try{const r=await fetch('/api/'+path,{method:body?'POST':'GET',headers:headers(),body:body?JSON.stringify(body):undefined});const d=await r.json();if(!r.ok)throw Error(d.error||'خطای سرور');return d}catch(e){toast(e.message);return null}}
+async function api(path,body){try{const r=await fetch('/api/'+path,{method:body?'POST':'GET',headers:headers(),body:body?JSON.stringify(body):undefined});const d=await r.json();if(!r.ok)throw Error(d.error||'خطای سرور');return d}catch(e){toast(e.message);return {ok:false,error:e.message}}}
 function codeOf(f){return f.properties.ISO_A3||f.properties.ADM0_A3||f.properties['ISO3166-1-Alpha-3']||''}
 function nameOf(f){return f.properties.ADMIN||f.properties.name||f.properties.NAME||'کشور ناشناخته'}
 function taken(f){return !!claimed[codeOf(f)]}
