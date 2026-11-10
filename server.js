@@ -94,6 +94,14 @@ async function initDb() {
       building_type TEXT NOT NULL, level INT NOT NULL DEFAULT 0,
       PRIMARY KEY(telegram_id,building_type)
     );
+    CREATE TABLE IF NOT EXISTS military_queue (
+      telegram_id BIGINT PRIMARY KEY REFERENCES players(telegram_id) ON DELETE CASCADE,
+      job_kind TEXT NOT NULL CHECK(job_kind IN ('unit','building')),
+      item_key TEXT NOT NULL,
+      quantity BIGINT NOT NULL DEFAULT 1,
+      started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      completes_at TIMESTAMPTZ NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS diplomacy (
       id BIGSERIAL PRIMARY KEY,
       from_id BIGINT NOT NULL REFERENCES players(telegram_id) ON DELETE CASCADE,
@@ -177,7 +185,7 @@ app.get("/api/profile",auth,async(req,res)=>{
   await applyProduction(req.user.id);
   const q=await pool.query("SELECT * FROM players WHERE telegram_id=$1",[String(req.user.id)]);
   const p=q.rows[0];
-  const military=await pool.query("SELECT COALESCE(SUM(m.quantity * CASE m.unit_type WHEN 'infantry' THEN 100 WHEN 'armor' THEN 180 WHEN 'air' THEN 260 WHEN 'navy' THEN 230 ELSE 0 END),0)::bigint AS power FROM military_units m WHERE m.telegram_id=$1",[String(req.user.id)]);
+  const military=await pool.query("SELECT COALESCE(SUM(m.quantity * CASE m.unit_type WHEN 'infantry' THEN 100 WHEN 'armor' THEN 180 WHEN 'tank' THEN 190 WHEN 'air' THEN 260 WHEN 'fighter' THEN 270 WHEN 'air_defense' THEN 150 WHEN 'artillery' THEN 145 WHEN 'navy' THEN 230 WHEN 'recon' THEN 80 ELSE 0 END),0)::bigint AS power FROM military_units m WHERE m.telegram_id=$1",[String(req.user.id)]);
   p.military_power=Number(military.rows[0]?.power||0);
   p.income=Number(Math.max(0,(p.industry-1)*75+(p.agriculture-1)*45+(p.level-1)*30));p.gdp=Number(p.coins)*4;p.population=0;
   res.json({ok:true,profile:p});
@@ -199,7 +207,7 @@ app.post("/api/select-country",auth,async(req,res)=>{
     if(own.rows[0]?.country_code){await client.query("ROLLBACK");return res.status(409).json({ok:false,error:"شما قبلاً کشور انتخاب کرده‌ای."});}
     const taken=await client.query("SELECT telegram_id FROM players WHERE country_code=$1",[code]);
     if(taken.rowCount){await client.query("ROLLBACK");return res.status(409).json({ok:false,error:"این کشور قبلاً انتخاب شده است."});}
-    await client.query("UPDATE players SET country_code=$1,country_name=$2,country_flag=$3,updated_at=NOW() WHERE telegram_id=$4",[code,name,flag||null,String(req.user.id)]);
+    await client.query("UPDATE players SET country_code=$1,country_name=$2,country_flag=$3,oil=GREATEST(oil,300),steel=GREATEST(steel,500),food=GREATEST(food,900),energy=GREATEST(energy,400),updated_at=NOW() WHERE telegram_id=$4",[code,name,flag||null,String(req.user.id)]);
     await client.query("COMMIT");await publishWorldEvent("📣 "+(flag?String.fromCodePoint(127397+flag.charCodeAt(0),127397+flag.charCodeAt(1))+" ":"🌍 ")+name+" کشور خود را وارد رقابت جهانی کرد.");res.json({ok:true});
   }catch(e){await client.query("ROLLBACK");if(e.code==="23505")return res.status(409).json({ok:false,error:"این کشور همین الان توسط فرمانده دیگری انتخاب شد. یک کشور آزاد دیگر انتخاب کن."});throw e}finally{client.release()}
 });
@@ -254,16 +262,26 @@ app.post("/api/owner/resource",auth,ownerOnly,async(req,res)=>{
 
 const UNIT_CATALOG = {
   infantry:{name:"نیروی زمینی",icon:"🪖",quantity:100,cost:{coins:260000,steel:25,food:70,energy:15,oil:0},power:100},
-  armor:{name:"یگان زرهی",icon:"🛡️",quantity:10,cost:{coins:720000,steel:100,food:25,energy:45,oil:70},power:180},
-  air:{name:"یگان هوایی",icon:"✈️",quantity:5,cost:{coins:1250000,steel:90,food:15,energy:100,oil:110},power:260},
-  navy:{name:"ناوگان دریایی",icon:"🚢",quantity:3,cost:{coins:1100000,steel:140,food:20,energy:65,oil:95},power:230}
+  tank:{name:"یگان تانک",icon:"🛡️",quantity:10,cost:{coins:720000,steel:100,food:25,energy:45,oil:70},power:190},
+  fighter:{name:"جنگنده",icon:"✈️",quantity:5,cost:{coins:1250000,steel:90,food:15,energy:100,oil:110},power:270},
+  air_defense:{name:"پدافند هوایی",icon:"📡",quantity:8,cost:{coins:890000,steel:110,food:10,energy:90,oil:65},power:150},
+  artillery:{name:"یگان پشتیبانی",icon:"🎯",quantity:12,cost:{coins:640000,steel:85,food:20,energy:35,oil:40},power:145},
+  navy:{name:"ناوگان دریایی",icon:"🚢",quantity:3,cost:{coins:1100000,steel:140,food:20,energy:65,oil:95},power:230},
+  recon:{name:"یگان شناسایی",icon:"🛰️",quantity:6,cost:{coins:420000,steel:35,food:15,energy:40,oil:25},power:80},
+  armor:{name:"یگان زرهی قدیمی",icon:"🚜",quantity:10,cost:{coins:720000,steel:100,food:25,energy:45,oil:70},power:180},
+  air:{name:"یگان هوایی قدیمی",icon:"🛩️",quantity:5,cost:{coins:1250000,steel:90,food:15,energy:100,oil:110},power:260}
 };
 const BUILDING_CATALOG = {
   power:{name:"نیروگاه برق",icon:"⚡",cost:{coins:650000,steel:90,oil:35,energy:0},output:"هر ساعت ۳۰ برق"},
   refinery:{name:"پالایشگاه نفت",icon:"🛢️",cost:{coins:820000,steel:100,oil:0,energy:120},output:"هر ساعت ۱۲ نفت",needs:"نیروگاه سطح ۱"},
   steelworks:{name:"کارخانه فولاد",icon:"🏭",cost:{coins:950000,steel:60,oil:45,energy:150},output:"هر ساعت ۱۰ فولاد",needs:"نیروگاه سطح ۱"},
-  farm:{name:"مزرعه صنعتی",icon:"🌾",cost:{coins:480000,steel:35,oil:0,energy:55},output:"هر ساعت ۱۸ غذا",needs:"نیروگاه سطح ۱"}
+  farm:{name:"مزرعه صنعتی",icon:"🌾",cost:{coins:480000,steel:35,oil:0,energy:55},output:"هر ساعت ۱۸ غذا",needs:"نیروگاه سطح ۱"},
+  barracks:{name:"مرکز آموزش",icon:"🏕️",cost:{coins:720000,steel:95,oil:20,energy:45},output:"افزایش ظرفیت سازماندهی یگان‌ها",needs:"نیروگاه سطح ۱"},
+  airbase:{name:"پایگاه هوایی",icon:"🛫",cost:{coins:980000,steel:130,oil:75,energy:80},output:"زیرساخت پشتیبانی هوایی",needs:"نیروگاه سطح ۱"},
+  naval_base:{name:"بندر نظامی",icon:"⚓",cost:{coins:1050000,steel:150,oil:90,energy:70},output:"زیرساخت پشتیبانی دریایی",needs:"نیروگاه سطح ۱"},
+  research:{name:"مرکز پژوهش",icon:"🔬",cost:{coins:900000,steel:85,oil:25,energy:110},output:"افزایش امتیاز فناوری",needs:"نیروگاه سطح ۱"}
 };
+const PRODUCTION_DURATION_MS=10*60*1000;
 async function applyProduction(id){
   const client=await pool.connect();
   try{
@@ -287,47 +305,79 @@ async function applyProduction(id){
     await client.query("COMMIT");
   }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
 }
+async function completeProductionQueue(id){
+  const client=await pool.connect();
+  try{
+    await client.query("BEGIN");
+    await client.query("SELECT telegram_id FROM players WHERE telegram_id=$1 FOR UPDATE",[String(id)]);
+    const q=await client.query("SELECT job_kind,item_key,quantity,completes_at FROM military_queue WHERE telegram_id=$1 FOR UPDATE",[String(id)]);
+    if(!q.rowCount){await client.query("COMMIT");return null}
+    const job=q.rows[0];
+    if(new Date(job.completes_at).getTime()>Date.now()){await client.query("COMMIT");return job}
+    if(job.job_kind==="unit"){
+      await client.query("INSERT INTO military_units(telegram_id,unit_type,quantity) VALUES($1,$2,$3) ON CONFLICT(telegram_id,unit_type) DO UPDATE SET quantity=military_units.quantity+EXCLUDED.quantity",[String(id),job.item_key,Number(job.quantity)]);
+      await client.query("INSERT INTO transactions(telegram_id,kind,resource,amount) VALUES($1,'recruit',$2,$3)",[String(id),job.item_key,Number(job.quantity)]);
+    }else if(job.job_kind==="building"){
+      await client.query("INSERT INTO national_buildings(telegram_id,building_type,level) VALUES($1,$2,1) ON CONFLICT(telegram_id,building_type) DO UPDATE SET level=national_buildings.level+1",[String(id),job.item_key]);
+    }
+    await client.query("DELETE FROM military_queue WHERE telegram_id=$1",[String(id)]);
+    await client.query("COMMIT");
+    return {completed:true,job_kind:job.job_kind,item_key:job.item_key,quantity:Number(job.quantity)};
+  }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
+}
+async function startProductionJob(id,jobKind,itemKey,item){
+  const client=await pool.connect(),cost=item.cost||{};
+  try{
+    await client.query("BEGIN");
+    await client.query("SELECT telegram_id FROM players WHERE telegram_id=$1 FOR UPDATE",[String(id)]);
+    const active=await client.query("SELECT job_kind,item_key,completes_at FROM military_queue WHERE telegram_id=$1 FOR UPDATE",[String(id)]);
+    if(active.rowCount){await client.query("ROLLBACK");return {ok:false,busy:true,queue:active.rows[0]}}
+    if(jobKind==="building"&&itemKey!=="power"){
+      const p=await client.query("SELECT level FROM national_buildings WHERE telegram_id=$1 AND building_type='power'",[String(id)]);
+      if(Number(p.rows[0]?.level||0)<1){await client.query("ROLLBACK");return {ok:false,error:"اول نیروگاه بساز تا زیرساخت‌های دیگر برق داشته باشند."}}
+    }
+    const fields=Object.keys(cost).filter(k=>["coins","steel","food","energy","oil"].includes(k));
+    const sets=fields.map((k,i)=>k+"="+k+"-$"+(i+1));
+    const guards=fields.map((k,i)=>k+">=$"+(i+1));
+    const values=fields.map(k=>Number(cost[k]||0));
+    values.push(String(id));
+    const player=await client.query("UPDATE players SET "+sets.join(",")+",updated_at=NOW() WHERE telegram_id=$"+values.length+" AND country_code IS NOT NULL AND "+guards.join(" AND ")+" RETURNING telegram_id",values);
+    if(!player.rowCount){await client.query("ROLLBACK");return {ok:false,error:"منابع کافی نیست یا هنوز کشورت رو انتخاب نکردی."}}
+    const queue=await client.query("INSERT INTO military_queue(telegram_id,job_kind,item_key,quantity,started_at,completes_at) VALUES($1,$2,$3,$4,NOW(),NOW()+INTERVAL '10 minutes') RETURNING job_kind,item_key,quantity,started_at,completes_at",[String(id),jobKind,itemKey,Number(item.quantity||1)]);
+    await client.query("COMMIT");
+    return {ok:true,queue:queue.rows[0]};
+  }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
+}
 app.get("/api/army",auth,async(req,res)=>{
   await applyProduction(req.user.id);
-  const [p,u,b]=await Promise.all([
+  await completeProductionQueue(req.user.id);
+  const [p,u,b,q]=await Promise.all([
     pool.query("SELECT coins,oil,steel,food,energy FROM players WHERE telegram_id=$1",[String(req.user.id)]),
     pool.query("SELECT unit_type,quantity FROM military_units WHERE telegram_id=$1",[String(req.user.id)]),
-    pool.query("SELECT building_type,level FROM national_buildings WHERE telegram_id=$1",[String(req.user.id)])
+    pool.query("SELECT building_type,level FROM national_buildings WHERE telegram_id=$1",[String(req.user.id)]),
+    pool.query("SELECT job_kind,item_key,quantity,started_at,completes_at FROM military_queue WHERE telegram_id=$1",[String(req.user.id)])
   ]);
   const units=Object.fromEntries(u.rows.map(x=>[x.unit_type,Number(x.quantity)]));
   const buildings=Object.fromEntries(b.rows.map(x=>[x.building_type,Number(x.level)]));
-  res.json({ok:true,resources:p.rows[0],units,buildings,unitCatalog:UNIT_CATALOG,buildingCatalog:BUILDING_CATALOG});
+  res.json({ok:true,resources:p.rows[0],units,buildings,queue:q.rows[0]||null,unitCatalog:UNIT_CATALOG,buildingCatalog:BUILDING_CATALOG});
 });
 app.post("/api/army/recruit",auth,async(req,res)=>{
-  const type=req.body?.type,item=UNIT_CATALOG[type];if(!item)return res.status(400).json({ok:false,error:"نوع یگان معتبر نیست."});
-  const c=item.cost,client=await pool.connect();
-  try{
-    await client.query("BEGIN");
-    const q=await client.query("UPDATE players SET coins=coins-$1,steel=steel-$2,food=food-$3,energy=energy-$4,oil=oil-$5,updated_at=NOW() WHERE telegram_id=$6 AND country_code IS NOT NULL AND coins >= $1 AND steel >= $2 AND food >= $3 AND energy >= $4 AND oil >= $5 RETURNING telegram_id",
-      [c.coins,c.steel,c.food,c.energy,c.oil,String(req.user.id)]);
-    if(!q.rowCount){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"منابع کافی نیست. هزینه و موجودی منابع را بررسی کن."})}
-    await client.query("INSERT INTO military_units(telegram_id,unit_type,quantity) VALUES($1,$2,$3) ON CONFLICT(telegram_id,unit_type) DO UPDATE SET quantity=military_units.quantity+EXCLUDED.quantity",[String(req.user.id),type,item.quantity]);
-    await client.query("INSERT INTO transactions(telegram_id,kind,resource,amount) VALUES($1,'recruit',$2,$3)",[String(req.user.id),type,item.quantity]);
-    await client.query("COMMIT");
-    await publishWorldEvent("🛡️ "+item.name+" به ساختار دفاعی یک کشور اضافه شد.");
-    res.json({ok:true});
-  }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
+  const type=req.body?.type,item=UNIT_CATALOG[type];
+  if(!item)return res.status(400).json({ok:false,error:"نوع یگان معتبر نیست."});
+  await applyProduction(req.user.id);
+  await completeProductionQueue(req.user.id);
+  const result=await startProductionJob(req.user.id,"unit",type,item);
+  if(!result.ok)return res.status(409).json(result);
+  res.json(result);
 });
 app.post("/api/army/build",auth,async(req,res)=>{
-  const type=req.body?.type,item=BUILDING_CATALOG[type];if(!item)return res.status(400).json({ok:false,error:"نوع زیرساخت معتبر نیست."});
-  const client=await pool.connect(),c=item.cost;
-  try{
-    await client.query("BEGIN");
-    const levels=await client.query("SELECT level FROM national_buildings WHERE telegram_id=$1 AND building_type='power'",[String(req.user.id)]);
-    if(type!=="power"&&Number(levels.rows[0]?.level||0)<1){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"اول باید نیروگاه بسازی تا برق موردنیاز زیرساخت فراهم شود."})}
-    const q=await client.query("UPDATE players SET coins=coins-$1,steel=steel-$2,oil=oil-$3,energy=energy-$4,updated_at=NOW() WHERE telegram_id=$5 AND country_code IS NOT NULL AND coins >= $1 AND steel >= $2 AND oil >= $3 AND energy >= $4 RETURNING telegram_id",[c.coins,c.steel,c.oil,c.energy,String(req.user.id)]);
-    if(!q.rowCount){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"منابع لازم برای ساخت این زیرساخت کافی نیست."})}
-    await client.query("INSERT INTO national_buildings(telegram_id,building_type,level) VALUES($1,$2,1) ON CONFLICT(telegram_id,building_type) DO UPDATE SET level=national_buildings.level+1",[String(req.user.id),type]);
-    await client.query("COMMIT");
-    const p=await pool.query("SELECT country_name FROM players WHERE telegram_id=$1",[String(req.user.id)]);
-    await publishWorldEvent("🏗️ "+(p.rows[0]?.country_name||"یک کشور")+" زیرساخت «"+item.name+"» را توسعه داد.");
-    res.json({ok:true});
-  }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
+  const type=req.body?.type,item=BUILDING_CATALOG[type];
+  if(!item)return res.status(400).json({ok:false,error:"نوع زیرساخت معتبر نیست."});
+  await applyProduction(req.user.id);
+  await completeProductionQueue(req.user.id);
+  const result=await startProductionJob(req.user.id,"building",type,item);
+  if(!result.ok)return res.status(409).json(result);
+  res.json(result);
 });
 app.get("/api/diplomacy",auth,async(req,res)=>{
   const id=String(req.user.id);
