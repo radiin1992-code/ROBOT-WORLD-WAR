@@ -94,8 +94,13 @@ app.post("/api/select-country",auth,async(req,res)=>{
 app.post("/api/upgrade",auth,async(req,res)=>{
   const {kind}=req.body||{}, costs={industry:{coins:1800,steel:120},energy:{coins:1500,oil:80},technology:{coins:3000,steel:180},agriculture:{coins:1300,food:100}};
   if(!costs[kind])return res.status(400).json({ok:false,error:"ارتقای نامعتبر"});
-  const c=costs[kind],col=kind;
-  const q=await pool.query(`UPDATE players SET coins=coins-$1, ${col}=${col}+1, updated_at=NOW() WHERE telegram_id=$2 AND coins >= $1 AND ${Object.keys(c).filter(k=>k!=="coins").map(k=>k+" >= "+c[k]).join(" AND ")||"TRUE"} RETURNING telegram_id`,[c.coins,String(req.user.id)]);
+  const c=costs[kind];
+  const resourceCost=Object.entries(c).filter(([k])=>k!=="coins");
+  const sets=[`coins=coins-$1`,`${kind}=${kind}+1`];
+  const guards=[`coins >= $1`];
+  const values=[c.coins,String(req.user.id)];
+  for (const [resource,amount] of resourceCost) { values.push(amount); sets.push(`${resource}=${resource}-${values.length}`); guards.push(`${resource} >= ${values.length}`); }
+  const q=await pool.query(`UPDATE players SET ${sets.join(",")},updated_at=NOW() WHERE telegram_id=$2 AND ${guards.join(" AND ")} RETURNING telegram_id`,values);
   if(!q.rowCount)return res.status(400).json({ok:false,error:"منابع کافی نیست"});
   res.json({ok:true});
 });
