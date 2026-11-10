@@ -1,6 +1,12 @@
 import express from "express";
 import pg from "pg";
 import crypto from "node:crypto";
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
+const worldTopology = require("world-atlas/countries-50m.json");
+const topojson = require("topojson-client");
+const isoCountries = require("i18n-iso-countries");
+const localWorldGeoJSON = (() => { const collection = topojson.feature(worldTopology, worldTopology.objects.countries); return { type: "FeatureCollection", features: collection.features.map(f => { const a3 = isoCountries.numericToAlpha3(String(f.id)); const a2 = isoCountries.numericToAlpha2(String(f.id)); return { ...f, properties: { ...f.properties, ADMIN: f.properties?.name || "Unknown", ISO_A3: a3 || "", ISO_A2: a2 || "" } }; }).filter(f => /^[A-Z]{3}$/.test(f.properties.ISO_A3)) }; })();
 
 const { Pool } = pg;
 const app = express();
@@ -150,8 +156,8 @@ app.get("/api/profile",auth,async(req,res)=>{
   res.json({ok:true,profile:p});
 });
 app.get("/api/news",auth,async(_req,res)=>{const q=await pool.query("SELECT id,message,created_at FROM world_news ORDER BY id DESC LIMIT 60");res.json({ok:true,items:q.rows});});
-let mapGeoCache=null,mapGeoAt=0,mapTextureCache=null;
-app.get("/api/map-data",async(_req,res)=>{try{if(mapGeoCache&&Date.now()-mapGeoAt<86400000)return res.json(mapGeoCache);let last;for(const url of ["https://cdn.jsdelivr.net/gh/datasets/geo-countries@master/data/countries.geojson","https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson"]){try{const r=await fetch(url,{signal:AbortSignal.timeout(18000),headers:{"user-agent":"RobotWorldWar/1.0"}});if(!r.ok)throw Error("HTTP "+r.status);const data=await r.json();if(!Array.isArray(data.features)||!data.features.length)throw Error("Invalid GeoJSON");mapGeoCache=data;mapGeoAt=Date.now();return res.json(data)}catch(e){last=e}}console.error("Map data unavailable",last);res.status(503).json({ok:false,error:"Map data temporarily unavailable"})}catch(e){res.status(500).json({ok:false,error:"Map data error"})}});
+const mapGeoCache=localWorldGeoJSON;
+app.get("/api/map-data",(_req,res)=>res.set("Cache-Control","public, max-age=86400").json(mapGeoCache));
 app.get("/api/map-texture",async(_req,res)=>{try{if(mapTextureCache)return res.type("image/jpeg").set("Cache-Control","public,max-age=604800").send(mapTextureCache);for(const url of ["https://cdn.jsdelivr.net/npm/three-globe@2.45.0/example/img/earth-blue-marble.jpg","https://unpkg.com/three-globe@2.45.0/example/img/earth-blue-marble.jpg"]){try{const r=await fetch(url,{signal:AbortSignal.timeout(12000)});if(!r.ok)continue;const b=Buffer.from(await r.arrayBuffer());if(b.length<10000)continue;mapTextureCache=b;return res.type("image/jpeg").set("Cache-Control","public,max-age=604800").send(b)}catch{}}res.status(503).end()}catch{res.status(503).end()}});
 app.get("/api/world",auth,async(_req,res)=>{
   const [claims,news]=await Promise.all([pool.query("SELECT country_code,telegram_id,country_name FROM players WHERE country_code IS NOT NULL"),pool.query("SELECT id,message FROM world_news ORDER BY id DESC LIMIT 40")]);
@@ -187,6 +193,20 @@ app.post("/api/upgrade",auth,async(req,res)=>{
   res.json({ok:true});
 });
 async function ownerOnly(req,res,next){if(String(req.user.id)!==OWNER_ID)return res.status(403).json({ok:false,error:"دسترسی غیرمجاز"});next()}
+app.post("/api/owner/release-country",auth,ownerOnly,async(req,res)=>{
+  const client=await pool.connect();
+  try{
+    await client.query("BEGIN");
+    const current=await client.query("SELECT country_code,country_name FROM players WHERE telegram_id=$1 FOR UPDATE",[OWNER_ID]);
+    if(!current.rowCount||!current.rows[0].country_code){await client.query("ROLLBACK");return res.status(409).json({ok:false,error:"در حال حاضر کشوری به حساب مالک وصل نیست."});}
+    const released=current.rows[0];
+    await client.query("UPDATE players SET country_code=NULL,country_name=NULL,country_flag='',updated_at=NOW() WHERE telegram_id=$1",[OWNER_ID]);
+    await client.query("INSERT INTO admin_logs(owner_id,target_id,action,details) VALUES($1,$1,'release_own_country',$2)",[OWNER_ID,JSON.stringify({country_code:released.country_code,country_name:released.country_name})]);
+    await client.query("COMMIT");
+    await publishWorldEvent("🏳️ "+released.country_name+" آزاد شد و دوباره در فهرست کشورها قرار گرفت.");
+    res.json({ok:true,released:released.country_code});
+  }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
+});
 app.post("/api/owner/money",auth,ownerOnly,async(req,res)=>{
   const target=String(req.body?.targetId||"");const amount=Number(req.body?.amount);
   if(!/^\d{5,20}$/.test(target)||!Number.isSafeInteger(amount)||amount<1||amount>100000000000)return res.status(400).json({ok:false,error:"مقادیر نامعتبر"});
