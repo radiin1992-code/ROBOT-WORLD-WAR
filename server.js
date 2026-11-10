@@ -101,7 +101,7 @@ app.post("/api/upgrade",auth,async(req,res)=>{
   const sets=[`coins=coins-$1`,`${upgradeColumn}=${upgradeColumn}+1`];
   const guards=[`coins >= $1`];
   const values=[c.coins,String(req.user.id)];
-  for (const [resource,amount] of resourceCost) { values.push(amount); sets.push(`${resource}=${resource}-${values.length}`); guards.push(`${resource} >= ${values.length}`); }
+  for (const [resource,amount] of resourceCost) { values.push(amount); sets.push(`${resource}=${resource}-$${values.length}`); guards.push(`${resource} >= $${values.length}`); }
   const q=await pool.query(`UPDATE players SET ${sets.join(",")},updated_at=NOW() WHERE telegram_id=$2 AND ${guards.join(" AND ")} RETURNING telegram_id`,values);
   if(!q.rowCount)return res.status(400).json({ok:false,error:"منابع کافی نیست"});
   res.json({ok:true});
