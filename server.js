@@ -246,6 +246,8 @@ app.post("/api/groups/:id/messages",auth,async(req,res)=>{
   const member=await pool.query("SELECT 1 FROM group_members WHERE group_id=$1 AND telegram_id=$2",[id,String(req.user.id)]);
   if(!member.rowCount)return res.status(403).json({ok:false,error:"عضو این گروه نیستی."});
   await pool.query("INSERT INTO group_messages(group_id,telegram_id,body) VALUES($1,$2,$3)",[id,String(req.user.id),body]);
+  const recipients=await pool.query("SELECT p.chat_id,g.name FROM group_members gm JOIN players p ON p.telegram_id=gm.telegram_id JOIN game_groups g ON g.id=gm.group_id WHERE gm.group_id=$1 AND gm.telegram_id<>$2 AND p.chat_id IS NOT NULL",[id,String(req.user.id)]);
+  await Promise.allSettled(recipients.rows.map(p=>telegramApi("sendMessage",{chat_id:p.chat_id,text:"💬 در گروه «"+p.name+"» پیام تازه‌ای دریافت کردی.",reply_markup:{inline_keyboard:[[{text:"نمایش گزارش",web_app:{url:APP_LINK("groups",{group:id})}}]]}})));
   res.json({ok:true});
 });
 app.get("/api/dm/:id",auth,async(req,res)=>{
@@ -260,6 +262,8 @@ app.post("/api/dm/:id",auth,async(req,res)=>{
   const p=await pool.query("SELECT 1 FROM players WHERE telegram_id=$1 AND country_code IS NOT NULL",[other]);
   if(!p.rowCount)return res.status(404).json({ok:false,error:"بازیکن پیدا نشد."});
   await pool.query("INSERT INTO direct_messages(sender_id,receiver_id,body) VALUES($1,$2,$3)",[String(req.user.id),other,body]);
+  const sender=await pool.query("SELECT country_name,first_name FROM players WHERE telegram_id=$1",[String(req.user.id)]);
+  await notifyPlayer(other,"✉️ "+(sender.rows[0]?.country_name||sender.rows[0]?.first_name||"یک فرمانده")+" برایت پیام خصوصی فرستاد.","private",{peer:req.user.id});
   res.json({ok:true});
 });
 app.get("/api/shop",auth,async(req,res)=>{
