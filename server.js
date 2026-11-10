@@ -9,7 +9,9 @@ app.use(express.static("public"));
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.DATABASE_URL?.includes("railway") || process.env.PGSSL === "true" ? { rejectUnauthorized: false } : undefined });
 const OWNER_ID = "1852348620";
 const BOT_TOKEN = process.env.BOT_TOKEN || "";
-const MINI_APP_URL = process.env.MINI_APP_URL || "";
+const PUBLIC_URL = process.env.RAILWAY_PUBLIC_DOMAIN ? "https://" + process.env.RAILWAY_PUBLIC_DOMAIN : "";
+const MINI_APP_URL = process.env.MINI_APP_URL || PUBLIC_URL;
+const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || "";
 
 async function initDb() {
   await pool.query(`
@@ -124,6 +126,7 @@ app.post("/api/owner/resource",auth,ownerOnly,async(req,res)=>{
   await pool.query("INSERT INTO transactions(telegram_id,kind,resource,amount) VALUES($1,'admin',$2,$3)",[target,resource,amount]);res.json({ok:true});
 });
 app.post("/telegram/webhook",async(req,res)=>{
+  if(WEBHOOK_SECRET && req.get("x-telegram-bot-api-secret-token")!==WEBHOOK_SECRET) return res.sendStatus(403);
   const m=req.body?.message;if(!m)return res.json({ok:true});
   const txt=m.text||"",chat=m.chat.id;
   if(txt.startsWith("/start")){const text="به مرکز فرماندهی ROBOT WORLD WAR خوش آمدی 🌍🤖";
@@ -134,4 +137,11 @@ app.post("/telegram/webhook",async(req,res)=>{
 });
 app.get("*",(req,res)=>res.sendFile(process.cwd()+"/public/index.html"));
 const port=process.env.PORT||3000;
-initDb().then(()=>app.listen(port,()=>console.log("ROBOT WORLD WAR online on "+port))).catch(e=>{console.error("Database initialization failed",e);process.exit(1)});
+initDb().then(()=>app.listen(port,async()=>{
+  console.log("ROBOT WORLD WAR online on "+port);
+  if(BOT_TOKEN && PUBLIC_URL){
+    const payload={url:PUBLIC_URL+"/telegram/webhook",allowed_updates:["message"]};
+    if(WEBHOOK_SECRET)payload.secret_token=WEBHOOK_SECRET;
+    try{await fetch("https://api.telegram.org/bot"+BOT_TOKEN+"/setWebhook",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});}catch(e){console.error("Telegram webhook setup failed");}
+  }
+})).catch(e=>{console.error("Database initialization failed",e);process.exit(1)});
