@@ -82,6 +82,7 @@ async function initDb() {
   `);
   await pool.query("ALTER TABLE players ADD COLUMN IF NOT EXISTS energy_level INT NOT NULL DEFAULT 1");
   await pool.query("ALTER TABLE players ADD COLUMN IF NOT EXISTS chat_id BIGINT");
+  await pool.query("ALTER TABLE players ADD COLUMN IF NOT EXISTS country_flag TEXT");
   await pool.query(`
     CREATE TABLE IF NOT EXISTS game_groups (
       id BIGSERIAL PRIMARY KEY, name TEXT NOT NULL, owner_id BIGINT NOT NULL REFERENCES players(telegram_id),
