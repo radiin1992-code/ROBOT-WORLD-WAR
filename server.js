@@ -33,14 +33,14 @@ async function configureTelegramBot() {
     return;
   }
   await Promise.all([
-    telegramApi("setMyName", { name: "ROBOT WORLD WAR" }),
-    telegramApi("setMyDescription", { description: "فرماندهی کشور خودت را به دست بگیر، اقتصاد بساز، با دیگر کشورها مذاکره کن و در نقشه زنده جهان رقابت کن." }),
-    telegramApi("setMyShortDescription", { short_description: "بازی استراتژیک آنلاین مدیریت کشور و رقابت جهانی 🌍" }),
+    telegramApi("setMyName", { name: "radinwar💥" }),
+    telegramApi("setMyDescription", { description: "به radinwar💥 خوش آمدی! کشور انتخاب کن، اقتصاد بساز، با فرماندهان دیگر گفت‌وگو کن و در یک جهان استراتژیک رقابت کن." }),
+    telegramApi("setMyShortDescription", { short_description: "بازی استراتژیک آنلاین؛ کشور، اقتصاد و رقابت جهانی 🌍" }),
     telegramApi("setMyCommands", { commands: [
       { command: "start", description: "شروع بازی و ورود به نقشه جهان" },
       { command: "game", description: "نمایش دکمه ورود به بازی" },
       { command: "help", description: "راهنمای بازی و دستورها" },
-      { command: "about", description: "درباره ROBOT WORLD WAR" }
+      { command: "about", description: "درباره radinwar💥" }
     ]}),
     telegramApi("setChatMenuButton", { menu_button: { type: "web_app", text: "🎮 Play", web_app: { url: MINI_APP_URL } } }),
     telegramApi("setWebhook", {
@@ -116,7 +116,7 @@ async function initDb() {
   await pool.query("UPDATE players SET coins=10000000,oil=0,steel=0,food=0,energy=0 WHERE country_code IS NULL");
 
   const n = await pool.query("SELECT COUNT(*)::int AS n FROM world_news");
-  if (!n.rows[0].n) await pool.query("INSERT INTO world_news(message) VALUES ($1),($2),($3)", ["شبکه جهانی ROBOT WORLD WAR راه‌اندازی شد.", "بازار جهانی آماده معامله است.", "فرماندهان جدید می‌توانند کشور خود را انتخاب کنند."]);
+  if (!n.rows[0].n) await pool.query("INSERT INTO world_news(message) VALUES ($1),($2),($3)", ["شبکه جهانی radinwar💥 راه‌اندازی شد.", "بازار جهانی آماده معامله است.", "فرماندهان جدید می‌توانند کشور خود را انتخاب کنند."]);
 }
 function safeEqual(a,b){const aa=Buffer.from(a),bb=Buffer.from(b);return aa.length===bb.length&&crypto.timingSafeEqual(aa,bb)}
 function verifyInitData(initData) {
@@ -241,7 +241,7 @@ app.post("/api/groups/:id/members",auth,async(req,res)=>{
   if(!p.rowCount)return res.status(404).json({ok:false,error:"بازیکن پیدا نشد."});
   await pool.query("INSERT INTO group_members(group_id,telegram_id) VALUES($1,$2) ON CONFLICT DO NOTHING",[id,target]);
   const inviter=await pool.query("SELECT country_name,first_name FROM players WHERE telegram_id=$1",[String(req.user.id)]);
-  await notifyPlayer(target,"👥 "+(inviter.rows[0]?.country_name||inviter.rows[0]?.first_name)+" تو را به یک گروه در ROBOT WORLD WAR دعوت کرد.","groups",{group:id});
+  await notifyPlayer(target,"👥 "+(inviter.rows[0]?.country_name||inviter.rows[0]?.first_name)+" تو را به یک گروه در radinwar💥 دعوت کرد.","groups",{group:id});
   res.json({ok:true});
 });
 app.get("/api/groups/:id/messages",auth,async(req,res)=>{
@@ -303,21 +303,21 @@ app.post("/telegram/webhook",async(req,res)=>{
   const txt=m.text||"",chat=m.chat.id;
   if(m.from?.id) await pool.query("INSERT INTO players(telegram_id,username,first_name,chat_id) VALUES($1,$2,$3,$4) ON CONFLICT(telegram_id) DO UPDATE SET username=EXCLUDED.username,first_name=EXCLUDED.first_name,chat_id=EXCLUDED.chat_id,updated_at=NOW()",[String(m.from.id),m.from.username||"",m.from.first_name||"Commander",String(chat)]);
   if(txt.startsWith("/start") || txt.startsWith("/game")){
-    const text="به مرکز فرماندهی ROBOT WORLD WAR خوش آمدی 🌍🤖\n\nکشورت را انتخاب کن، اقتصاد بساز و وارد رقابت جهانی شو.";
+    const text="💥 به radinwar خوش اومدی فرمانده!\n\n🌍 اول یک کشور آزاد انتخاب کن؛ هر کشور فقط یک فرمانده داره و انتخابت قابل تغییر نیست.\n💰 با ۱۰ میلیون سرمایه شروع می‌کنی.\n🏗️ اقتصاد و زیرساختت رو توسعه بده.\n🤝 با فرمانده‌های دیگه گفت‌وگو و گروه تشکیل بده.\n📣 بیانیه منتشر کن و رویدادهای داخل بازی رو دنبال کن.\n\n📜 قوانین: احترام به بازیکن‌ها، ممنوعیت اسپم و جعل خبر واقعی، و رعایت مالکیت دائمی کشورها.";
     await telegramApi("sendMessage",{chat_id:chat,text,reply_markup:{inline_keyboard:[[{text:"🚀 ورود به بازی",web_app:{url:MINI_APP_URL}}]]}});
   } else if(txt.startsWith("/help")){
-    await telegramApi("sendMessage",{chat_id:chat,text:"راهنمای ROBOT WORLD WAR\n/start یا /game : ورود به بازی\n/about : درباره بازی\n/help : راهنما",reply_markup:{inline_keyboard:[[{text:"🌍 باز کردن Mini App",web_app:{url:MINI_APP_URL}}]]}});
+    await telegramApi("sendMessage",{chat_id:chat,text:"📘 راهنمای radinwar💥\n/start یا /game: ورود به بازی\nکشور: انتخاب دائمی یک کشور آزاد\nاقتصاد: خرید منابع و توسعه زیرساخت\nارتباطات: چت خصوصی و گروه‌ها\nبیانیه‌ها: انتشار پیام و تصویر\nبازار جهانی: رویدادهای داخل بازی\n/help: نمایش همین راهنما\n\nقوانین: احترام، عدم اسپم، عدم جعل خبر واقعی و رعایت انتخاب دائمی کشور.",reply_markup:{inline_keyboard:[[{text:"🌍 باز کردن Mini App",web_app:{url:MINI_APP_URL}}]]}});
   } else if(txt && !txt.startsWith("/") && String(from?.id)!==OWNER_ID){
     await telegramApi("sendMessage",{chat_id:OWNER_ID,text:"📩 پیام تازه به ربات از "+(from?.first_name||"کاربر")+" (@"+(from?.username||"بدون نام کاربری")+"):\n\n"+txt,reply_markup:{inline_keyboard:[[{text:"🌍 باز کردن بازی",web_app:{url:APP_LINK("market")}}]]}});
     await telegramApi("sendMessage",{chat_id:chat,text:"پیامت به مرکز فرماندهی رسید. 📡"});
   } else if(txt.startsWith("/about")){
-    await telegramApi("sendMessage",{chat_id:chat,text:"ROBOT WORLD WAR یک بازی استراتژیک آنلاین با نقشه جهان، مدیریت اقتصاد و رقابت میان کشورهاست.",reply_markup:{inline_keyboard:[[{text:"🚀 ورود به بازی",web_app:{url:MINI_APP_URL}}]]}});
+    await telegramApi("sendMessage",{chat_id:chat,text:"💥 radinwar یک بازی استراتژیک آنلاین برای انتخاب کشور، مدیریت اقتصاد، ارتباط با فرمانده‌ها و رقابت در جهان شبیه‌سازی‌شده است.",reply_markup:{inline_keyboard:[[{text:"🚀 ورود به بازی",web_app:{url:MINI_APP_URL}}]]}});
   }
   res.json({ok:true});
 });
 app.get("*",(req,res)=>res.sendFile(process.cwd()+"/public/index.html"));
 const port=process.env.PORT||3000;
 initDb().then(()=>app.listen(port,async()=>{
-  console.log("ROBOT WORLD WAR online on "+port);
+  console.log("radinwar💥 online on "+port);
   await configureTelegramBot();
 })).catch(e=>{console.error("Database initialization failed",e);process.exit(1)});
