@@ -1,0 +1,3 @@
+# Copy to .dev.vars locally. Never commit real credentials.
+BOT_TOKEN=PUT_BOT_TOKEN_IN_CLOUDFLARE_SECRET
+MINI_APP_URL=https://YOUR-DEPLOYED-APP.workers.dev
