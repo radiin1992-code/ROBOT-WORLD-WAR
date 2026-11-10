@@ -177,7 +177,10 @@ app.get("/api/profile",auth,async(req,res)=>{
   await ensurePlayer(req.user);
   await applyProduction(req.user.id);
   const q=await pool.query("SELECT * FROM players WHERE telegram_id=$1",[String(req.user.id)]);
-  const p=q.rows[0]; p.income=Number(Math.max(0,(p.industry-1)*75+(p.agriculture-1)*45+(p.level-1)*30));p.gdp=Number(p.coins)*4;p.population=0;
+  const p=q.rows[0];
+  const military=await pool.query("SELECT COALESCE(SUM(m.quantity * CASE m.unit_type WHEN 'infantry' THEN 100 WHEN 'armor' THEN 180 WHEN 'air' THEN 260 WHEN 'navy' THEN 230 ELSE 0 END),0)::bigint AS power FROM military_units m WHERE m.telegram_id=$1",[String(req.user.id)]);
+  p.military_power=Number(military.rows[0]?.power||0);
+  p.income=Number(Math.max(0,(p.industry-1)*75+(p.agriculture-1)*45+(p.level-1)*30));p.gdp=Number(p.coins)*4;p.population=0;
   res.json({ok:true,profile:p});
 });
 app.get("/api/news",auth,async(_req,res)=>{const q=await pool.query("SELECT id,message,created_at FROM world_news ORDER BY id DESC LIMIT 60");res.json({ok:true,items:q.rows});});
