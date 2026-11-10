@@ -19,7 +19,7 @@ async function initDb() {
       country_code TEXT UNIQUE, country_name TEXT,
       oil BIGINT NOT NULL DEFAULT 300, steel BIGINT NOT NULL DEFAULT 500,
       food BIGINT NOT NULL DEFAULT 900, energy BIGINT NOT NULL DEFAULT 400,
-      technology INT NOT NULL DEFAULT 1, industry INT NOT NULL DEFAULT 1,
+      technology INT NOT NULL DEFAULT 1, industry INT NOT NULL DEFAULT 1, energy_level INT NOT NULL DEFAULT 1,
       agriculture INT NOT NULL DEFAULT 1, approval INT NOT NULL DEFAULT 75,
       wins INT NOT NULL DEFAULT 0, losses INT NOT NULL DEFAULT 0,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -40,6 +40,7 @@ async function initDb() {
       PRIMARY KEY (telegram_id, kind)
     );
   `);
+  await pool.query("ALTER TABLE players ADD COLUMN IF NOT EXISTS energy_level INT NOT NULL DEFAULT 1");
   const n = await pool.query("SELECT COUNT(*)::int AS n FROM world_news");
   if (!n.rows[0].n) await pool.query("INSERT INTO world_news(message) VALUES ($1),($2),($3)", ["شبکه جهانی ROBOT WORLD WAR راه‌اندازی شد.", "بازار جهانی آماده معامله است.", "فرماندهان جدید می‌توانند کشور خود را انتخاب کنند."]);
 }
@@ -95,8 +96,9 @@ app.post("/api/upgrade",auth,async(req,res)=>{
   const {kind}=req.body||{}, costs={industry:{coins:1800,steel:120},energy:{coins:1500,oil:80},technology:{coins:3000,steel:180},agriculture:{coins:1300,food:100}};
   if(!costs[kind])return res.status(400).json({ok:false,error:"ارتقای نامعتبر"});
   const c=costs[kind];
+  const upgradeColumn=kind==="energy"?"energy_level":kind;
   const resourceCost=Object.entries(c).filter(([k])=>k!=="coins");
-  const sets=[`coins=coins-$1`,`${kind}=${kind}+1`];
+  const sets=[`coins=coins-$1`,`${upgradeColumn}=${upgradeColumn}+1`];
   const guards=[`coins >= $1`];
   const values=[c.coins,String(req.user.id)];
   for (const [resource,amount] of resourceCost) { values.push(amount); sets.push(`${resource}=${resource}-${values.length}`); guards.push(`${resource} >= ${values.length}`); }
