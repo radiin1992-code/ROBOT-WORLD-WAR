@@ -6,10 +6,10 @@ const { Pool } = pg;
 const app = express();
 app.use(express.json({ limit: "32kb" }));
 app.use(express.static("public"));
-const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.DATABASE_URL?.includes("railway") || process.env.PGSSL === "true" ? { rejectUnauthorized: false } : undefined });
+const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.PGSSL === "true" ? { rejectUnauthorized: false } : undefined, max: 10, idleTimeoutMillis: 30000, connectionTimeoutMillis: 10000 });
 const OWNER_ID = "1852348620";
 const BOT_TOKEN = process.env.BOT_TOKEN || "";
-const PUBLIC_URL = process.env.RAILWAY_PUBLIC_DOMAIN ? "https://" + process.env.RAILWAY_PUBLIC_DOMAIN : "";
+const PUBLIC_URL = process.env.RENDER_EXTERNAL_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? "https://" + process.env.RAILWAY_PUBLIC_DOMAIN : "");
 const MINI_APP_URL = process.env.MINI_APP_URL || PUBLIC_URL;
 const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || "";
 
@@ -70,7 +70,7 @@ async function ensurePlayer(user) {
     ON CONFLICT(telegram_id) DO UPDATE SET username=EXCLUDED.username,first_name=EXCLUDED.first_name,updated_at=NOW()`,
     [String(user.id),user.username||"",user.first_name||"Commander"]);
 }
-app.get("/health", async (_req,res)=>res.json({ok:true,service:"robot-world-war",database:"connected"}));
+app.get("/health", async (_req,res)=>{ try { await pool.query("SELECT 1"); res.status(200).json({ok:true,service:"robot-world-war",database:"connected"}); } catch { res.status(503).json({ok:false,service:"robot-world-war",database:"disconnected"}); } });
 app.get("/api/profile",auth,async(req,res)=>{
   await ensurePlayer(req.user);
   const q=await pool.query("SELECT * FROM players WHERE telegram_id=$1",[String(req.user.id)]);
