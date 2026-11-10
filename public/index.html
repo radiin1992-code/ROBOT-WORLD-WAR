@@ -124,7 +124,7 @@ function loadGlobeLibrary(){
   if(typeof window.Globe==="function")return Promise.resolve();
   if(globeLibraryPromise)return globeLibraryPromise;
   globeLibraryPromise=(async()=>{
-    const sources=["https://unpkg.com/globe.gl","https://cdn.jsdelivr.net/npm/globe.gl"];
+    const sources=["https://cdn.jsdelivr.net/npm/globe.gl@2.45.0","https://unpkg.com/globe.gl@2.45.0"];
     for(const src of sources){
       try{await new Promise((resolve,reject)=>{const script=document.createElement("script");script.src=src;script.async=true;let settled=false;const timer=setTimeout(()=>{if(!settled){settled=true;script.remove();reject(new Error("Globe CDN timeout"))}},7000);script.onload=()=>{if(!settled){settled=true;clearTimeout(timer);resolve()}};script.onerror=()=>{if(!settled){settled=true;clearTimeout(timer);script.remove();reject(new Error("Globe library unavailable"))}};document.head.appendChild(script)});if(typeof window.Globe==="function")return}catch(e){console.warn("3D map library fallback:",e)}
     }
@@ -177,8 +177,8 @@ async function renderWorldMap(){
   const players=features.filter(f=>claims[iso3(f)]||iso3(f)===me?.country_code);
   const labels=players.map(f=>{const c=countryCenter(f);return {lat:c.lat,lng:c.lng,text:flag(iso2(f))+" "+cname(f)}});
   world.labelsData(labels).labelLat(d=>d.lat).labelLng(d=>d.lng).labelText(d=>d.text).labelSize(.34).labelDotRadius(.07).labelColor(()=>"rgba(255,250,225,.96)").labelAltitude(.014);
-  const renderer=world.renderer?.();if(renderer){renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.1));renderer.setSize(w,h,false);renderer.setClearColor("#030b15",1)}
-  const controls=world.controls();controls.enableDamping=true;controls.dampingFactor=.08;controls.rotateSpeed=.48;controls.zoomSpeed=.68;controls.minDistance=145;controls.maxDistance=440;controls.enablePan=false;controls.autoRotate=false;
+  const renderer=world.renderer?.();if(renderer){renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,.8));renderer.setSize(w,h,false);renderer.setClearColor("#030b15",1)}
+  const controls=world.controls();controls.enableDamping=false;controls.rotateSpeed=.42;controls.zoomSpeed=.68;controls.minDistance=145;controls.maxDistance=440;controls.enablePan=false;controls.autoRotate=false;
   world.pointOfView({lat:18,lng:8,altitude:2.05},0);window.radinwarGlobe=world;
   $("mapZoomIn").onclick=()=>controls.dollyIn(1.3);$("mapZoomOut").onclick=()=>controls.dollyOut(1.3);$("mapReset").onclick=()=>world.pointOfView({lat:18,lng:8,altitude:2.05},450);
   if(window.radinwarMapResize)window.radinwarMapResize.disconnect();
@@ -238,6 +238,19 @@ $('ownerResourceBtn')?.addEventListener('click',async()=>{const targetId=$('owne
 
 function switchView(name){document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('active',x.dataset.view===name));document.querySelectorAll('.bottom-nav button').forEach(x=>x.classList.toggle('active',x.dataset.view===name));document.querySelectorAll('.view').forEach(x=>x.classList.toggle('active',x.id===name));if(window.radinwarGlobe){if(name==='map')window.radinwarGlobe.resumeAnimation?.();else window.radinwarGlobe.pauseAnimation?.()}if(name==='map'){loadGeo().then(()=>drawGlobe());}if(name==='army')loadArmy();if(name==='war'||name==='diplomacy')loadDiplomacy();if(name==='market')loadNews();if(name==='announcements')loadAnnouncements();if(name==='groups')loadGroups();if(name==='private')loadPlayers();window.scrollTo({top:0,behavior:'smooth'})}document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>switchView(b.dataset.view));
 const originalLoadPlayers=loadPlayers;loadPlayers=async()=>{await originalLoadPlayers();fillMemberSelect()};
+let knownServerVersion=null,versionCheckBusy=false;
+async function checkServerVersion(){
+ if(versionCheckBusy)return;versionCheckBusy=true;
+ try{
+  const r=await fetch('/api/version',{cache:'no-store',headers:{'x-telegram-init-data':INIT_DATA}});
+  if(!r.ok)return;
+  const d=await r.json();if(!d.version)return;
+  if(knownServerVersion===null){knownServerVersion=d.version;return}
+  if(d.version!==knownServerVersion){location.reload()}
+ }catch(e){console.warn('version check:',e)}finally{versionCheckBusy=false}
+}
+checkServerVersion();
+setInterval(checkServerVersion,15000);
 setInterval(()=>{if(activeGroup&&!$('groupRoom').classList.contains('hide'))loadGroupMessages();if(activeDm&&!$('dmRoom').classList.contains('hide'))loadDm();if($('market').classList.contains('active'))loadNews()},12000);
 (async()=>{if(!INIT_DATA){$('bootScreen')?.classList.add('hide');$('countryScreen').classList.remove('hide');$('appHeader').classList.add('hide');$('countryList').innerHTML='<div class="panel" style="padding:22px;text-align:center"><b>اتصال تلگرام کامل نشد</b><p>بازی را از دکمهٔ Mini App داخل ربات باز کن و دوباره تلاش کن</p><button class="primary" onclick="location.reload()">تلاش دوباره</button></div>';return}const ready=await loadProfile();if(!ready){const c=$('bootScreen')?.querySelector('.boot-copy');if(c)c.textContent='اتصال سرور طول کشیده است؛ صفحه را تازه کن تا دوباره تلاش کنیم.';const s=$('bootScreen')?.querySelector('.boot-spinner');if(s)s.style.display='none';return}$('bootScreen')?.classList.add('hide');loadWorld();loadGeo();const q=new URLSearchParams(location.search),v=q.get('view'),peer=q.get('peer'),report=q.get('report');if(me?.country_code&&v&&document.getElementById(v))switchView(v);if(peer){await loadPlayers();const p=players.find(x=>String(x.telegram_id)===String(peer));if(p)await openDm(p)}const group=q.get('group');if(group){const gd=await api('groups');const g=gd.groups?.find(x=>String(x.id)===String(group));if(g)await openGroup(g)}if(report&&v==='announcements'){await loadAnnouncements();setTimeout(()=>document.getElementById('announcement-'+report)?.scrollIntoView({behavior:'smooth',block:'center'}),350)}if(report&&v==='market'){await loadNews();setTimeout(()=>document.querySelector('[data-news=\"'+report+'\"]')?.scrollIntoView({behavior:'smooth',block:'center'}),350)}})();
 </script></body></html>
