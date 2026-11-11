@@ -216,7 +216,7 @@ async function loadShop(){
   b.dataset.pending="0";shopPurchasePending=false;
   if(z.ok){toast("خرید انجام شد؛ همه خریدها تا ۱۰ دقیقه قفل شدند");updateShopCooldown(z.cooldownSeconds||600);await loadProfile()}
   else if(z.cooldownSeconds){updateShopCooldown(z.cooldownSeconds)}
-  else {b.disabled=false;b.textContent="خرید"}
+  else {updateShopCooldown(0)}
  });
 }
 
