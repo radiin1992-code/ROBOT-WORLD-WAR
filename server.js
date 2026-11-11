@@ -15,7 +15,7 @@ app.use(express.json({ limit: "7mb" }));
 app.use(express.static("public",{setHeaders(res,filePath){if(filePath.endsWith(".html"))res.setHeader("Cache-Control","no-store, no-cache, must-revalidate");}}));
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.PGSSL === "true" ? { rejectUnauthorized: false } : undefined, max: 10, idleTimeoutMillis: 30000, connectionTimeoutMillis: 10000 });
 const OWNER_ID = "1852348620";
-const BUILD_VERSION = "rw-20261111-01";
+const BUILD_VERSION = "rw-20261111-02";
 const BOT_TOKEN = process.env.BOT_TOKEN || "";
 const PUBLIC_URL = process.env.RENDER_EXTERNAL_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? "https://" + process.env.RAILWAY_PUBLIC_DOMAIN : "");
 const MINI_APP_URL = process.env.MINI_APP_URL || PUBLIC_URL;
@@ -110,6 +110,7 @@ async function initDb() {
 
   `);
   await pool.query("ALTER TABLE players ADD COLUMN IF NOT EXISTS energy_level INT NOT NULL DEFAULT 1");
+  await pool.query("ALTER TABLE players ADD COLUMN IF NOT EXISTS shop_cooldown_until TIMESTAMPTZ");
   await pool.query("ALTER TABLE players ADD COLUMN IF NOT EXISTS chat_id BIGINT");
   await pool.query("ALTER TABLE players ADD COLUMN IF NOT EXISTS country_flag TEXT");
   await pool.query("ALTER TABLE players ADD COLUMN IF NOT EXISTS production_at TIMESTAMPTZ NOT NULL DEFAULT NOW()");
@@ -481,7 +482,8 @@ app.post("/api/dm/:id",auth,async(req,res)=>{
   res.json({ok:true});
 });
 app.get("/api/shop",auth,async(req,res)=>{
-  res.json({ok:true,items:[
+  const state=await pool.query("SELECT GREATEST(0,CEIL(EXTRACT(EPOCH FROM (shop_cooldown_until-NOW()))))::int AS cooldown_seconds FROM players WHERE telegram_id=$1",[String(req.user.id)]);
+  res.set("Cache-Control","no-store").json({ok:true,cooldownSeconds:state.rows[0]?.cooldown_seconds||0,items:[
     {id:"oil",name:"نفت",icon:"🛢️",amount:100,price:180000},
     {id:"steel",name:"فولاد",icon:"🔩",amount:100,price:140000},
     {id:"food",name:"غذا",icon:"🌾",amount:250,price:90000},
@@ -494,12 +496,17 @@ app.get("/api/shop",auth,async(req,res)=>{
 app.post("/api/shop/buy",auth,async(req,res)=>{
   const catalog={oil:{price:180000,amount:100,column:"oil"},steel:{price:140000,amount:100,column:"steel"},food:{price:90000,amount:250,column:"food"},energy:{price:160000,amount:100,column:"energy"},industry:{price:1200000,amount:1,column:"industry"},agriculture:{price:850000,amount:1,column:"agriculture"},technology:{price:1800000,amount:1,column:"technology"}};
   const item=catalog[req.body?.item];if(!item)return res.status(400).json({ok:false,error:"کالای نامعتبر."});
-  const q=await pool.query(`UPDATE players SET coins=coins-$1,${item.column}=${item.column}+$2,updated_at=NOW() WHERE telegram_id=$3 AND country_code IS NOT NULL AND coins >= $1 RETURNING coins`,[item.price,item.amount,String(req.user.id)]);
-  if(!q.rowCount)return res.status(400).json({ok:false,error:"پول کافی نداری."});
+  const q=await pool.query(`UPDATE players SET coins=coins-$1,${item.column}=${item.column}+$2,shop_cooldown_until=NOW()+INTERVAL '10 minutes',updated_at=NOW() WHERE telegram_id=$3 AND country_code IS NOT NULL AND coins >= $1 AND (shop_cooldown_until IS NULL OR shop_cooldown_until<=NOW()) RETURNING coins,CEIL(EXTRACT(EPOCH FROM (shop_cooldown_until-NOW())))::int AS cooldown_seconds`,[item.price,item.amount,String(req.user.id)]);
+  if(!q.rowCount){
+    const state=await pool.query("SELECT coins,GREATEST(0,CEIL(EXTRACT(EPOCH FROM (shop_cooldown_until-NOW()))))::int AS cooldown_seconds,country_code FROM players WHERE telegram_id=$1",[String(req.user.id)]);
+    if(!state.rowCount||!state.rows[0].country_code)return res.status(400).json({ok:false,error:"اول باید کشور انتخاب کنی."});
+    if(Number(state.rows[0].cooldown_seconds)>0)return res.status(429).json({ok:false,error:"همه خریدها در کول‌داون هستند.",cooldownSeconds:Number(state.rows[0].cooldown_seconds)});
+    return res.status(400).json({ok:false,error:"پول کافی نداری."});
+  }
   await pool.query("INSERT INTO transactions(telegram_id,kind,resource,amount) VALUES($1,'purchase',$2,$3)",[String(req.user.id),item.column,item.amount]);
   const buyer=await pool.query("SELECT country_name,first_name FROM players WHERE telegram_id=$1",[String(req.user.id)]);
   await publishWorldEvent("🏪 "+(buyer.rows[0]?.country_name||buyer.rows[0]?.first_name)+" از بازار جهانی "+item.amount+" واحد "+item.column+" خریداری کرد.");
-  res.json({ok:true,coins:q.rows[0].coins});
+  res.set("Cache-Control","no-store").json({ok:true,coins:q.rows[0].coins,cooldownSeconds:Number(q.rows[0].cooldown_seconds)||600});
 });
 app.post("/telegram/webhook",async(req,res)=>{
   if(WEBHOOK_SECRET && req.get("x-telegram-bot-api-secret-token")!==WEBHOOK_SECRET) return res.sendStatus(403);
