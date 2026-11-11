@@ -226,6 +226,10 @@ app.post("/api/upgrade",auth,async(req,res)=>{
   res.json({ok:true});
 });
 async function ownerOnly(req,res,next){if(String(req.user.id)!==OWNER_ID)return res.status(403).json({ok:false,error:"دسترسی غیرمجاز"});next()}
+app.get("/api/owner/players",auth,ownerOnly,async(_req,res)=>{
+  const q=await pool.query("SELECT telegram_id,first_name,username,country_name,country_code,country_flag,created_at FROM players WHERE country_code IS NOT NULL ORDER BY country_name,first_name LIMIT 500");
+  res.set("Cache-Control","no-store").json({ok:true,players:q.rows});
+});
 app.post("/api/owner/release-country",auth,ownerOnly,async(req,res)=>{
   const client=await pool.connect();
   try{
