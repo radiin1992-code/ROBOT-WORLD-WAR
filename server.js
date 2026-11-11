@@ -561,17 +561,17 @@ app.post("/api/dm/:id",auth,async(req,res)=>{
 app.get("/api/shop",auth,async(req,res)=>{
   const state=await pool.query("SELECT GREATEST(0,CEIL(EXTRACT(EPOCH FROM (shop_cooldown_until-NOW()))))::int AS cooldown_seconds FROM players WHERE telegram_id=$1",[String(req.user.id)]);
   res.set("Cache-Control","no-store").json({ok:true,cooldownSeconds:state.rows[0]?.cooldown_seconds||0,items:[
-    {id:"oil",name:"نفت",icon:"🛢️",amount:100,price:180000,incomeBonus:300},
-    {id:"steel",name:"فولاد",icon:"🔩",amount:100,price:140000,incomeBonus:250},
-    {id:"food",name:"غذا",icon:"🌾",amount:250,price:90000,incomeBonus:200},
-    {id:"energy",name:"انرژی",icon:"⚡",amount:100,price:160000,incomeBonus:300},
-    {id:"industry",name:"کارخانه",icon:"🏭",amount:1,price:1200000,incomeBonus:20000},
-    {id:"agriculture",name:"مرکز کشاورزی",icon:"🚜",amount:1,price:850000,incomeBonus:12000},
-    {id:"technology",name:"مرکز فناوری",icon:"🧬",amount:1,price:1800000,incomeBonus:25000}
+    {id:"oil",name:"نفت",icon:"🛢️",amount:100,price:180000,incomeBonus:3000},
+    {id:"steel",name:"فولاد",icon:"🔩",amount:100,price:140000,incomeBonus:2500},
+    {id:"food",name:"غذا",icon:"🌾",amount:250,price:90000,incomeBonus:2000},
+    {id:"energy",name:"انرژی",icon:"⚡",amount:100,price:160000,incomeBonus:3000},
+    {id:"industry",name:"کارخانه",icon:"🏭",amount:1,price:1200000,incomeBonus:200000},
+    {id:"agriculture",name:"مرکز کشاورزی",icon:"🚜",amount:1,price:850000,incomeBonus:120000},
+    {id:"technology",name:"مرکز فناوری",icon:"🧬",amount:1,price:1800000,incomeBonus:250000}
   ]});
 });
 app.post("/api/shop/buy",auth,async(req,res)=>{
-  const catalog={oil:{price:180000,amount:100,column:"oil",incomeBonus:300},steel:{price:140000,amount:100,column:"steel",incomeBonus:250},food:{price:90000,amount:250,column:"food",incomeBonus:200},energy:{price:160000,amount:100,column:"energy",incomeBonus:300},industry:{price:1200000,amount:1,column:"industry",incomeBonus:20000},agriculture:{price:850000,amount:1,column:"agriculture",incomeBonus:12000},technology:{price:1800000,amount:1,column:"technology",incomeBonus:25000}};
+  const catalog={oil:{price:180000,amount:100,column:"oil",incomeBonus:3000},steel:{price:140000,amount:100,column:"steel",incomeBonus:2500},food:{price:90000,amount:250,column:"food",incomeBonus:2000},energy:{price:160000,amount:100,column:"energy",incomeBonus:3000},industry:{price:1200000,amount:1,column:"industry",incomeBonus:200000},agriculture:{price:850000,amount:1,column:"agriculture",incomeBonus:120000},technology:{price:1800000,amount:1,column:"technology",incomeBonus:250000}};
   const item=catalog[req.body?.item];if(!item)return res.status(400).json({ok:false,error:"کالای نامعتبر."});
   const q=await pool.query(`UPDATE players SET coins=coins-$1,${item.column}=${item.column}+$2,shop_income=shop_income+$3,shop_cooldown_until=NOW()+INTERVAL '10 minutes',updated_at=NOW() WHERE telegram_id=$4 AND country_code IS NOT NULL AND coins >= $1 AND (shop_cooldown_until IS NULL OR shop_cooldown_until<=NOW()) RETURNING coins,CEIL(EXTRACT(EPOCH FROM (shop_cooldown_until-NOW())))::int AS cooldown_seconds`,[item.price,item.amount,item.incomeBonus,String(req.user.id)]);
   if(!q.rowCount){
