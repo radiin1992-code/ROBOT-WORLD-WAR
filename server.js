@@ -114,6 +114,7 @@ async function initDb() {
   await pool.query("ALTER TABLE players ADD COLUMN IF NOT EXISTS chat_id BIGINT");
   await pool.query("ALTER TABLE players ADD COLUMN IF NOT EXISTS country_flag TEXT");
   await pool.query("ALTER TABLE players ADD COLUMN IF NOT EXISTS production_at TIMESTAMPTZ NOT NULL DEFAULT NOW()");
+  await pool.query("ALTER TABLE players ADD COLUMN IF NOT EXISTS shop_income BIGINT NOT NULL DEFAULT 0");
   await pool.query(`
     CREATE TABLE IF NOT EXISTS game_groups (
       id BIGSERIAL PRIMARY KEY, name TEXT NOT NULL, owner_id BIGINT NOT NULL REFERENCES players(telegram_id),
@@ -184,10 +185,10 @@ app.get("/api/profile",auth,async(req,res)=>{
   p.military_power=military.rows.reduce((sum,row)=>sum+Number(row.quantity||0)*Number(UNIT_CATALOG[row.unit_type]?.power||0),0);
   const ownedBuildings=await pool.query("SELECT building_type,level FROM national_buildings WHERE telegram_id=$1",[String(req.user.id)]);
   const buildingIncome=ownedBuildings.rows.reduce((sum,row)=>sum+Number(row.level||0)*Number(BUILDING_CATALOG[row.building_type]?.production?.coins||0),0);
-  p.income=Number(countryEconomy(p.country_code).income+Math.max(0,(p.industry-1)*75+(p.agriculture-1)*45+(p.level-1)*30)/3600+buildingIncome);p.gdp=Number(p.coins)*4;p.population=0;
+  p.income=Number(countryEconomy(p.country_code).income+Math.max(0,(p.industry-1)*75+(p.agriculture-1)*45+(p.level-1)*30)/3600+buildingIncome+Number(p.shop_income||0));p.gdp=Number(p.coins)*4;p.population=0;
   res.json({ok:true,profile:p});
 });
-app.get("/api/treasury",auth,async(req,res)=>{await applyProduction(req.user.id);const q=await pool.query("SELECT coins,country_code,industry,agriculture,level FROM players WHERE telegram_id=$1",[String(req.user.id)]);if(!q.rowCount)return res.status(404).json({ok:false});const p=q.rows[0];const b=await pool.query("SELECT building_type,level FROM national_buildings WHERE telegram_id=$1",[String(req.user.id)]);const buildingIncome=b.rows.reduce((sum,row)=>sum+Number(row.level||0)*Number(BUILDING_CATALOG[row.building_type]?.production?.coins||0),0);const income=Number(countryEconomy(p.country_code).income+Math.max(0,(p.industry-1)*75+(p.agriculture-1)*45+(p.level-1)*30)/3600+buildingIncome);res.json({ok:true,coins:p.coins,income});});
+app.get("/api/treasury",auth,async(req,res)=>{await applyProduction(req.user.id);const q=await pool.query("SELECT coins,country_code,industry,agriculture,level,shop_income FROM players WHERE telegram_id=$1",[String(req.user.id)]);if(!q.rowCount)return res.status(404).json({ok:false});const p=q.rows[0];const b=await pool.query("SELECT building_type,level FROM national_buildings WHERE telegram_id=$1",[String(req.user.id)]);const buildingIncome=b.rows.reduce((sum,row)=>sum+Number(row.level||0)*Number(BUILDING_CATALOG[row.building_type]?.production?.coins||0),0);const income=Number(countryEconomy(p.country_code).income+Math.max(0,(p.industry-1)*75+(p.agriculture-1)*45+(p.level-1)*30)/3600+buildingIncome+Number(p.shop_income||0));res.json({ok:true,coins:p.coins,income});});
 app.get("/api/news",auth,async(_req,res)=>{const q=await pool.query("SELECT id,message,created_at FROM world_news ORDER BY id DESC LIMIT 60");res.json({ok:true,items:q.rows});});
 const mapGeoCache=localWorldGeoJSON;
 app.get("/api/map-data",(_req,res)=>res.set("Cache-Control","public, max-age=86400").json(mapGeoCache));
@@ -356,14 +357,14 @@ async function applyProduction(id){
   const client=await pool.connect();
   try{
     await client.query("BEGIN");
-    const p=await client.query("SELECT coins,energy,oil,steel,food,production_at,country_code FROM players WHERE telegram_id=$1 FOR UPDATE",[String(id)]);
+    const p=await client.query("SELECT coins,energy,oil,steel,food,production_at,country_code,shop_income FROM players WHERE telegram_id=$1 FOR UPDATE",[String(id)]);
     if(!p.rowCount){await client.query("ROLLBACK");return}
     const b=await client.query("SELECT building_type,level FROM national_buildings WHERE telegram_id=$1",[String(id)]);
     const levels=Object.fromEntries(b.rows.map(x=>[x.building_type,Number(x.level)]));
     const seconds=Math.max(0,Math.min(86400,(Date.now()-new Date(p.rows[0].production_at).getTime())/1000));
     const hours=seconds/3600;
     if(seconds>=1){
-      const base=countryEconomy(p.rows[0].country_code); let coins=Number(p.rows[0].coins)+seconds*base.income,energy=Number(p.rows[0].energy)+hours*base.energy,oil=Number(p.rows[0].oil)+hours*base.oil,steel=Number(p.rows[0].steel)+hours*base.steel,food=Number(p.rows[0].food)+hours*base.food;
+      const base=countryEconomy(p.rows[0].country_code); let coins=Number(p.rows[0].coins)+seconds*(base.income+Number(p.rows[0].shop_income||0)),energy=Number(p.rows[0].energy)+hours*base.energy,oil=Number(p.rows[0].oil)+hours*base.oil,steel=Number(p.rows[0].steel)+hours*base.steel,food=Number(p.rows[0].food)+hours*base.food;
       for(const key of ["power","solar","wind","hydro","geothermal","nuclear","tidal","biomass","wastepower","solarpark","offshorewind","battery"])energy+=hours*(levels[key]||0)*Number(BUILDING_CATALOG[key].production.energy||0);
       for(const [key,item] of Object.entries(BUILDING_CATALOG)){
         const production=item.production||{},level=levels[key]||0;
@@ -560,19 +561,19 @@ app.post("/api/dm/:id",auth,async(req,res)=>{
 app.get("/api/shop",auth,async(req,res)=>{
   const state=await pool.query("SELECT GREATEST(0,CEIL(EXTRACT(EPOCH FROM (shop_cooldown_until-NOW()))))::int AS cooldown_seconds FROM players WHERE telegram_id=$1",[String(req.user.id)]);
   res.set("Cache-Control","no-store").json({ok:true,cooldownSeconds:state.rows[0]?.cooldown_seconds||0,items:[
-    {id:"oil",name:"نفت",icon:"🛢️",amount:100,price:180000},
-    {id:"steel",name:"فولاد",icon:"🔩",amount:100,price:140000},
-    {id:"food",name:"غذا",icon:"🌾",amount:250,price:90000},
-    {id:"energy",name:"انرژی",icon:"⚡",amount:100,price:160000},
-    {id:"industry",name:"کارخانه",icon:"🏭",amount:1,price:1200000},
-    {id:"agriculture",name:"مرکز کشاورزی",icon:"🚜",amount:1,price:850000},
-    {id:"technology",name:"مرکز فناوری",icon:"🧬",amount:1,price:1800000}
+    {id:"oil",name:"نفت",icon:"🛢️",amount:100,price:180000,incomeBonus:300},
+    {id:"steel",name:"فولاد",icon:"🔩",amount:100,price:140000,incomeBonus:250},
+    {id:"food",name:"غذا",icon:"🌾",amount:250,price:90000,incomeBonus:200},
+    {id:"energy",name:"انرژی",icon:"⚡",amount:100,price:160000,incomeBonus:300},
+    {id:"industry",name:"کارخانه",icon:"🏭",amount:1,price:1200000,incomeBonus:20000},
+    {id:"agriculture",name:"مرکز کشاورزی",icon:"🚜",amount:1,price:850000,incomeBonus:12000},
+    {id:"technology",name:"مرکز فناوری",icon:"🧬",amount:1,price:1800000,incomeBonus:25000}
   ]});
 });
 app.post("/api/shop/buy",auth,async(req,res)=>{
-  const catalog={oil:{price:180000,amount:100,column:"oil"},steel:{price:140000,amount:100,column:"steel"},food:{price:90000,amount:250,column:"food"},energy:{price:160000,amount:100,column:"energy"},industry:{price:1200000,amount:1,column:"industry"},agriculture:{price:850000,amount:1,column:"agriculture"},technology:{price:1800000,amount:1,column:"technology"}};
+  const catalog={oil:{price:180000,amount:100,column:"oil",incomeBonus:300},steel:{price:140000,amount:100,column:"steel",incomeBonus:250},food:{price:90000,amount:250,column:"food",incomeBonus:200},energy:{price:160000,amount:100,column:"energy",incomeBonus:300},industry:{price:1200000,amount:1,column:"industry",incomeBonus:20000},agriculture:{price:850000,amount:1,column:"agriculture",incomeBonus:12000},technology:{price:1800000,amount:1,column:"technology",incomeBonus:25000}};
   const item=catalog[req.body?.item];if(!item)return res.status(400).json({ok:false,error:"کالای نامعتبر."});
-  const q=await pool.query(`UPDATE players SET coins=coins-$1,${item.column}=${item.column}+$2,shop_cooldown_until=NOW()+INTERVAL '10 minutes',updated_at=NOW() WHERE telegram_id=$3 AND country_code IS NOT NULL AND coins >= $1 AND (shop_cooldown_until IS NULL OR shop_cooldown_until<=NOW()) RETURNING coins,CEIL(EXTRACT(EPOCH FROM (shop_cooldown_until-NOW())))::int AS cooldown_seconds`,[item.price,item.amount,String(req.user.id)]);
+  const q=await pool.query(`UPDATE players SET coins=coins-$1,${item.column}=${item.column}+$2,shop_income=shop_income+$3,shop_cooldown_until=NOW()+INTERVAL '10 minutes',updated_at=NOW() WHERE telegram_id=$3 AND country_code IS NOT NULL AND coins >= $1 AND (shop_cooldown_until IS NULL OR shop_cooldown_until<=NOW()) RETURNING coins,CEIL(EXTRACT(EPOCH FROM (shop_cooldown_until-NOW())))::int AS cooldown_seconds`,[item.price,item.amount,item.incomeBonus,String(req.user.id)]);
   if(!q.rowCount){
     const state=await pool.query("SELECT coins,GREATEST(0,CEIL(EXTRACT(EPOCH FROM (shop_cooldown_until-NOW()))))::int AS cooldown_seconds,country_code FROM players WHERE telegram_id=$1",[String(req.user.id)]);
     if(!state.rowCount||!state.rows[0].country_code)return res.status(400).json({ok:false,error:"اول باید کشور انتخاب کنی."});
