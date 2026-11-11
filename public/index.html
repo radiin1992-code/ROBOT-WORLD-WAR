@@ -74,6 +74,8 @@ button,.panel,.item,.stat,.post,.view-banner{transition:transform .16s ease,bord
   <section id="ownerTools" class="panel hide" style="margin:14px 0;border-color:#d6b467;background:linear-gradient(145deg,#252033,#111827)">
    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><b style="color:#f4d58a;font-size:14px">👑 پنل اختصاصی مالک</b><span class="eyebrow">OWNER CONTROL</span></div>
    <p class="sub">مدیریت حساب‌ها و آزادسازی کشور خودت. این ابزار فقط برای شناسه مالک فعال است.</p>
+   <div style="display:flex;justify-content:space-between;align-items:center;margin:10px 0 6px"><b style="font-size:12px;color:#f4d58a">🌍 بازیکنان ثبت‌نام‌کرده با کشور</b><button id="refreshOwnerPlayers" class="btn" style="padding:6px 10px">🔄 بروزرسانی</button></div>
+   <div id="ownerPlayersList" class="feed"><div class="note">برای دریافت فهرست، پنل مالک را باز کن.</div></div>
    <button id="releaseCountryBtn" class="btn" style="width:100%;border-color:#d9a6a6;background:linear-gradient(110deg,#5b2634,#351b2b);color:#ffe0e0">🏳️ آزاد کردن کشور خودم</button>
    <div class="row" style="margin-top:10px"><input id="ownerTarget" class="field" inputmode="numeric" placeholder="آیدی تلگرام بازیکن"><input id="ownerAmount" class="field" inputmode="numeric" type="number" min="1" placeholder="مقدار"></div>
    <button id="ownerMoneyBtn" class="btn primary" style="width:100%">💰 افزودن پول به بازیکن</button>
@@ -276,13 +278,22 @@ function fillMemberSelect(){const s=$('memberSelect');s.innerHTML=players.map(p=
 
 $('countrySearch')?.addEventListener('input',renderCountries);
 
+async function loadOwnerPlayers(){
+ const box=$('ownerPlayersList');if(!box||String(me?.telegram_id)!==OWNER_ID)return;
+ box.innerHTML='<div class="note">در حال دریافت فهرست کشورها...</div>';
+ const d=await api('owner/players');
+ if(!d.ok){box.innerHTML='<div class="note">'+esc(d.error||'دریافت فهرست ناموفق بود')+'</div>';return}
+ box.innerHTML=d.players.map(p=>'<button class="playerrow" type="button" data-owner-player="'+esc(p.telegram_id)+'"><span style="text-align:right"><b>'+esc(p.country_flag||'🌍')+' '+esc(p.country_name||'کشور ثبت‌شده')+'</b><small style="display:block;color:#9eb0c8;margin-top:4px">'+esc(p.first_name||'بازیکن')+(p.username?' • @'+esc(p.username):'')+'</small><small style="display:block;color:#d9c58e;margin-top:3px;direction:ltr;text-align:right">ID: '+esc(p.telegram_id)+'</small></span><span>انتخاب ←</span></button>').join('')||'<div class="note">هنوز بازیکنی با کشور ثبت‌شده وجود ندارد.</div>';
+ box.querySelectorAll('[data-owner-player]').forEach(b=>b.onclick=()=>{$('ownerTarget').value=b.dataset.ownerPlayer;toast('آیدی بازیکن انتخاب شد')});
+}
+$('refreshOwnerPlayers')?.addEventListener('click',loadOwnerPlayers);
 $('releaseCountryBtn')?.addEventListener('click',async()=>{if(String(me?.telegram_id)!==OWNER_ID)return;if(!confirm('کشور فعلی آزاد شود؟ بعد از این کار می‌توانی کشور آزاد دیگری انتخاب کنی.'))return;const b=$('releaseCountryBtn');b.disabled=true;const d=await api('owner/release-country',{});b.disabled=false;if(d.ok){toast('کشور آزاد شد');await loadProfile();window.scrollTo({top:0,behavior:'smooth'})}});
 $('ownerMoneyBtn')?.addEventListener('click',async()=>{const targetId=$('ownerTarget').value.trim(),amount=Number($('ownerAmount').value);if(!/^\d{5,20}$/.test(targetId)||!Number.isSafeInteger(amount)||amount<1)return toast('آیدی و مقدار معتبر وارد کن');const d=await api('owner/money',{targetId,amount});if(d.ok)toast('پول با موفقیت اضافه شد')});
 $('ownerResourceBtn')?.addEventListener('click',async()=>{const targetId=$('ownerTarget').value.trim(),amount=Number($('ownerAmount').value),resource=$('ownerResource').value;if(!/^\d{5,20}$/.test(targetId)||!Number.isSafeInteger(amount)||amount<1)return toast('آیدی و مقدار معتبر وارد کن');const d=await api('owner/resource',{targetId,amount,resource});if(d.ok)toast('منبع با موفقیت اضافه شد')});
 
 function switchView(name){document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('active',x.dataset.view===name));document.querySelectorAll('.bottom-nav button').forEach(x=>x.classList.toggle('active',x.dataset.view===name));document.querySelectorAll('.view').forEach(x=>x.classList.toggle('active',x.id===name));if(window.radinwarGlobe){if(name==='map')window.radinwarGlobe.resumeAnimation?.();else window.radinwarGlobe.pauseAnimation?.()}if(name==='map'){loadGeo().then(()=>drawGlobe());}if(name==='army'||name==='economy')loadArmy();if(name==='war'||name==='diplomacy')loadDiplomacy();if(name==='market')loadNews();if(name==='announcements')loadAnnouncements();if(name==='groups')loadGroups();if(name==='private')loadPlayers();window.scrollTo({top:0,behavior:'smooth'})}document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>switchView(b.dataset.view));
 const originalLoadPlayers=loadPlayers;loadPlayers=async()=>{await originalLoadPlayers();fillMemberSelect()};
-const CLIENT_BUILD_VERSION="rw-20261111-05";let versionCheckBusy=false;
+const CLIENT_BUILD_VERSION="rw-20261111-06";let versionCheckBusy=false;
 async function checkServerVersion(){
  if(versionCheckBusy)return;versionCheckBusy=true;
  try{
