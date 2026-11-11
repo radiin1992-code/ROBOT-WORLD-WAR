@@ -295,16 +295,14 @@ function switchView(name){document.querySelectorAll('.tabs button').forEach(x=>x
 const originalLoadPlayers=loadPlayers;loadPlayers=async()=>{await originalLoadPlayers();fillMemberSelect()};
 const CLIENT_BUILD_VERSION="rw-20261111-07";let versionCheckBusy=false;
 async function checkServerVersion(){
- if(versionCheckBusy)return;versionCheckBusy=true;
  try{
   const r=await fetch('/api/version',{cache:'no-store',headers:{'x-telegram-init-data':INIT_DATA}});
   if(!r.ok)return;
-  const d=await r.json();if(!d.version)return;
-  if(d.version!==CLIENT_BUILD_VERSION){location.reload()}
- }catch(e){console.warn('version check:',e)}finally{versionCheckBusy=false}
+  const d=await r.json();
+  if(d.version&&d.version!==CLIENT_BUILD_VERSION)console.info('A newer game build is available; automatic reload is disabled to prevent reconnect loops.');
+ }catch(e){console.warn('version check:',e)}
 }
 checkServerVersion();
-setInterval(checkServerVersion,15000);
 setInterval(async()=>{if(!me?.country_code)return;try{const t=await api('treasury');if(t.ok){me.coins=Number(t.coins);me.income=Number(t.income);$('coins').textContent=me.coins.toLocaleString('en-US');$('income').textContent=me.income.toLocaleString('en-US')}}catch(e){console.warn('treasury refresh:',e)}},1000);
 setInterval(()=>{if(activeGroup&&!$('groupRoom').classList.contains('hide'))loadGroupMessages();if(activeDm&&!$('dmRoom').classList.contains('hide'))loadDm();if($('market').classList.contains('active'))loadNews()},12000);
 (async()=>{if(!INIT_DATA){$('bootScreen')?.classList.add('hide');$('countryScreen').classList.remove('hide');$('appHeader').classList.add('hide');$('countryList').innerHTML='<div class="panel" style="padding:22px;text-align:center"><b>اتصال تلگرام کامل نشد</b><p>بازی را از دکمهٔ Mini App داخل ربات باز کن و دوباره تلاش کن</p><button class="primary" onclick="location.reload()">تلاش دوباره</button></div>';return}const ready=await loadProfile();if(!ready){const c=$('bootScreen')?.querySelector('.boot-copy');if(c)c.textContent='اتصال سرور طول کشیده است؛ صفحه را تازه کن تا دوباره تلاش کنیم.';const s=$('bootScreen')?.querySelector('.boot-spinner');if(s)s.style.display='none';return}$('bootScreen')?.classList.add('hide');loadWorld();loadGeo();const q=new URLSearchParams(location.search),v=q.get('view'),peer=q.get('peer'),report=q.get('report');if(me?.country_code&&v&&document.getElementById(v))switchView(v);if(peer){await loadPlayers();const p=players.find(x=>String(x.telegram_id)===String(peer));if(p)await openDm(p)}const group=q.get('group');if(group){const gd=await api('groups');const g=gd.groups?.find(x=>String(x.id)===String(group));if(g)await openGroup(g)}if(report&&v==='announcements'){await loadAnnouncements();setTimeout(()=>document.getElementById('announcement-'+report)?.scrollIntoView({behavior:'smooth',block:'center'}),350)}if(report&&v==='market'){await loadNews();setTimeout(()=>document.querySelector('[data-news=\"'+report+'\"]')?.scrollIntoView({behavior:'smooth',block:'center'}),350)}})();
