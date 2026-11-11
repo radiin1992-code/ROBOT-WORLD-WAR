@@ -184,10 +184,10 @@ app.get("/api/profile",auth,async(req,res)=>{
   p.military_power=military.rows.reduce((sum,row)=>sum+Number(row.quantity||0)*Number(UNIT_CATALOG[row.unit_type]?.power||0),0);
   const ownedBuildings=await pool.query("SELECT building_type,level FROM national_buildings WHERE telegram_id=$1",[String(req.user.id)]);
   const buildingIncome=ownedBuildings.rows.reduce((sum,row)=>sum+Number(row.level||0)*Number(BUILDING_CATALOG[row.building_type]?.production?.coins||0),0);
-  p.income=Number(countryEconomy(p.country_code).income+Math.max(0,(p.industry-1)*75+(p.agriculture-1)*45+(p.level-1)*30)/3600+buildingIncome/3600);p.gdp=Number(p.coins)*4;p.population=0;
+  p.income=Number(countryEconomy(p.country_code).income+Math.max(0,(p.industry-1)*75+(p.agriculture-1)*45+(p.level-1)*30)/3600+buildingIncome);p.gdp=Number(p.coins)*4;p.population=0;
   res.json({ok:true,profile:p});
 });
-app.get("/api/treasury",auth,async(req,res)=>{await applyProduction(req.user.id);const q=await pool.query("SELECT coins,country_code,industry,agriculture,level FROM players WHERE telegram_id=$1",[String(req.user.id)]);if(!q.rowCount)return res.status(404).json({ok:false});const p=q.rows[0];const b=await pool.query("SELECT building_type,level FROM national_buildings WHERE telegram_id=$1",[String(req.user.id)]);const buildingIncome=b.rows.reduce((sum,row)=>sum+Number(row.level||0)*Number(BUILDING_CATALOG[row.building_type]?.production?.coins||0),0);const income=Number(countryEconomy(p.country_code).income+Math.max(0,(p.industry-1)*75+(p.agriculture-1)*45+(p.level-1)*30)/3600+buildingIncome/3600);res.json({ok:true,coins:p.coins,income});});
+app.get("/api/treasury",auth,async(req,res)=>{await applyProduction(req.user.id);const q=await pool.query("SELECT coins,country_code,industry,agriculture,level FROM players WHERE telegram_id=$1",[String(req.user.id)]);if(!q.rowCount)return res.status(404).json({ok:false});const p=q.rows[0];const b=await pool.query("SELECT building_type,level FROM national_buildings WHERE telegram_id=$1",[String(req.user.id)]);const buildingIncome=b.rows.reduce((sum,row)=>sum+Number(row.level||0)*Number(BUILDING_CATALOG[row.building_type]?.production?.coins||0),0);const income=Number(countryEconomy(p.country_code).income+Math.max(0,(p.industry-1)*75+(p.agriculture-1)*45+(p.level-1)*30)/3600+buildingIncome);res.json({ok:true,coins:p.coins,income});});
 app.get("/api/news",auth,async(_req,res)=>{const q=await pool.query("SELECT id,message,created_at FROM world_news ORDER BY id DESC LIMIT 60");res.json({ok:true,items:q.rows});});
 const mapGeoCache=localWorldGeoJSON;
 app.get("/api/map-data",(_req,res)=>res.set("Cache-Control","public, max-age=86400").json(mapGeoCache));
@@ -370,7 +370,7 @@ async function applyProduction(id){
         if(!level||production.energy)continue;
         const need=Number(production.energyNeed||0),active=need>0?Math.min(level,energy/(hours*need)):level;
         if(need>0)energy=Math.max(0,energy-hours*active*need);
-        if(production.coins)coins+=hours*active*production.coins;
+        if(production.coins)coins+=seconds*active*production.coins;
         if(production.oil)oil+=hours*active*production.oil;
         if(production.steel)steel+=hours*active*production.steel;
         if(production.food)food+=hours*active*production.food;
