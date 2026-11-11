@@ -209,7 +209,7 @@ function updateShopCooldown(seconds){
 }
 async function loadShop(){
  const d=await api("shop");if(!d.ok)return;
- $("shopGrid").innerHTML='<div id="shopCooldownStatus" class="shop-cooldown-status"></div>'+d.items.map(x=>'<div class="item"><span class="icon">'+x.icon+'</span><b>'+x.name+'</b><small>دریافت: '+x.amount+' واحد</small><small class="price">'+x.price.toLocaleString("en-US")+' پول</small><button class="btn primary" data-buy="'+x.id+'">خرید</button></div>').join("");
+ $("shopGrid").innerHTML='<div id="shopCooldownStatus" class="shop-cooldown-status"></div>'+d.items.map(x=>'<div class="item"><span class="icon">'+x.icon+'</span><b>'+x.name+'</b><small>دریافت: '+x.amount+' واحد</small><small class="price">قیمت خرید: '+x.price.toLocaleString("en-US")+' پول</small><small class="cost">افزایش درآمد: +'+Number(x.incomeBonus||0).toLocaleString("en-US")+' پول در ثانیه</small><button class="btn primary" data-buy="'+x.id+'">خرید</button></div>').join("");
  updateShopCooldown(d.cooldownSeconds||0);
  $("shopGrid").querySelectorAll("[data-buy]").forEach(b=>b.onclick=async()=>{
   if(Date.now()<shopCooldownEndsAt)return;
