@@ -184,9 +184,10 @@ app.get("/api/profile",auth,async(req,res)=>{
   p.military_power=military.rows.reduce((sum,row)=>sum+Number(row.quantity||0)*Number(UNIT_CATALOG[row.unit_type]?.power||0),0);
   const ownedBuildings=await pool.query("SELECT building_type,level FROM national_buildings WHERE telegram_id=$1",[String(req.user.id)]);
   const buildingIncome=ownedBuildings.rows.reduce((sum,row)=>sum+Number(row.level||0)*Number(BUILDING_CATALOG[row.building_type]?.production?.coins||0),0);
-  p.income=Number(countryEconomy(p.country_code).income+Math.max(0,(p.industry-1)*75+(p.agriculture-1)*45+(p.level-1)*30)+buildingIncome);p.gdp=Number(p.coins)*4;p.population=0;
+  p.income=Number(countryEconomy(p.country_code).income+Math.max(0,(p.industry-1)*75+(p.agriculture-1)*45+(p.level-1)*30)/3600+buildingIncome/3600);p.gdp=Number(p.coins)*4;p.population=0;
   res.json({ok:true,profile:p});
 });
+app.get("/api/treasury",auth,async(req,res)=>{await applyProduction(req.user.id);const q=await pool.query("SELECT coins,country_code,industry,agriculture,level FROM players WHERE telegram_id=$1",[String(req.user.id)]);if(!q.rowCount)return res.status(404).json({ok:false});const p=q.rows[0];const b=await pool.query("SELECT building_type,level FROM national_buildings WHERE telegram_id=$1",[String(req.user.id)]);const buildingIncome=b.rows.reduce((sum,row)=>sum+Number(row.level||0)*Number(BUILDING_CATALOG[row.building_type]?.production?.coins||0),0);const income=Number(countryEconomy(p.country_code).income+Math.max(0,(p.industry-1)*75+(p.agriculture-1)*45+(p.level-1)*30)/3600+buildingIncome/3600);res.json({ok:true,coins:p.coins,income});});
 app.get("/api/news",auth,async(_req,res)=>{const q=await pool.query("SELECT id,message,created_at FROM world_news ORDER BY id DESC LIMIT 60");res.json({ok:true,items:q.rows});});
 const mapGeoCache=localWorldGeoJSON;
 app.get("/api/map-data",(_req,res)=>res.set("Cache-Control","public, max-age=86400").json(mapGeoCache));
@@ -337,7 +338,7 @@ const COUNTRY_ECONOMY = {
  AUS:{income:74000,energy:40,oil:24,steel:18,food:30}, KOR:{income:78000,energy:30,oil:5,steel:20,food:10},
  ITA:{income:69000,energy:27,oil:8,steel:12,food:22}, ESP:{income:64000,energy:34,oil:7,steel:10,food:25},
  TUR:{income:56000,energy:26,oil:9,steel:14,food:26}, SAU:{income:68000,energy:40,oil:48,steel:8,food:8},
- IRN:{income:59000,energy:38,oil:42,steel:17,food:20}, IDN:{income:49000,energy:31,oil:16,steel:12,food:29},
+ IRN:{income:29000,energy:38,oil:42,steel:17,food:20}, IDN:{income:49000,energy:31,oil:16,steel:12,food:29},
  MEX:{income:57000,energy:29,oil:20,steel:13,food:24}, NLD:{income:73000,energy:28,oil:11,steel:11,food:18},
  NOR:{income:77000,energy:50,oil:38,steel:10,food:13}, CHE:{income:84000,energy:33,oil:4,steel:9,food:12},
  ZAF:{income:45000,energy:24,oil:8,steel:19,food:18}, EGY:{income:39000,energy:25,oil:13,steel:9,food:23},
@@ -355,9 +356,10 @@ async function applyProduction(id){
     if(!p.rowCount){await client.query("ROLLBACK");return}
     const b=await client.query("SELECT building_type,level FROM national_buildings WHERE telegram_id=$1",[String(id)]);
     const levels=Object.fromEntries(b.rows.map(x=>[x.building_type,Number(x.level)]));
-    const hours=Math.max(0,Math.min(24,(Date.now()-new Date(p.rows[0].production_at).getTime())/3600000));
-    if(hours>=0.02){
-      const base=countryEconomy(p.rows[0].country_code); let coins=Number(p.rows[0].coins)+hours*base.income,energy=Number(p.rows[0].energy)+hours*base.energy,oil=Number(p.rows[0].oil)+hours*base.oil,steel=Number(p.rows[0].steel)+hours*base.steel,food=Number(p.rows[0].food)+hours*base.food;
+    const seconds=Math.max(0,Math.min(86400,(Date.now()-new Date(p.rows[0].production_at).getTime())/1000));
+    const hours=seconds/3600;
+    if(seconds>=1){
+      const base=countryEconomy(p.rows[0].country_code); let coins=Number(p.rows[0].coins)+seconds*base.income,energy=Number(p.rows[0].energy)+hours*base.energy,oil=Number(p.rows[0].oil)+hours*base.oil,steel=Number(p.rows[0].steel)+hours*base.steel,food=Number(p.rows[0].food)+hours*base.food;
       for(const key of ["power","solar","wind","hydro","geothermal","nuclear","tidal","biomass","wastepower","solarpark","offshorewind","battery"])energy+=hours*(levels[key]||0)*Number(BUILDING_CATALOG[key].production.energy||0);
       for(const [key,item] of Object.entries(BUILDING_CATALOG)){
         const production=item.production||{},level=levels[key]||0;
