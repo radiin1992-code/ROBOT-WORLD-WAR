@@ -100,7 +100,7 @@ button,.panel,.item,.stat,.post,.view-banner{transition:transform .16s ease,bord
 const tg=window.Telegram?.WebApp;const launchParams=new URLSearchParams((location.hash||'').replace(/^#/,'')+'&'+location.search.replace(/^\?/,'').replace(/^$/,''));const INIT_DATA=tg?.initData||launchParams.get('tgWebAppData')||'';tg?.ready();tg?.expand();tg?.setHeaderColor?.('#080d18');tg?.setBackgroundColor?.('#080d18');
 const $=id=>document.getElementById(id),OWNER_ID='1852348620',GEO_URL='/api/map-data';let me=null,geo=null,claims={},countries=[],activeGroup=null,activeDm=null,players=[],armyCategory="all",armySearch="",armyLimit=12;
 function toast(s){$('toast').textContent=s;$('toast').classList.add('show');setTimeout(()=>$('toast').classList.remove('show'),2600)}
-async function api(path,body){try{const r=await fetch('/api/'+path,{method:body?'POST':'GET',headers:{'content-type':'application/json','x-telegram-init-data':INIT_DATA},body:body?JSON.stringify(body):undefined});const d=await r.json();if(!r.ok)throw Error(d.error||'خطای سرور');return d}catch(e){toast(e.message);return {ok:false,error:e.message}}}
+async function api(path,body){try{const r=await fetch('/api/'+path,{method:body?'POST':'GET',headers:{'content-type':'application/json','x-telegram-init-data':INIT_DATA},body:body?JSON.stringify(body):undefined,cache:'no-store'});const d=await r.json();if(!r.ok){toast(d.error||'خطای سرور');return {...d,ok:false}}return d}catch(e){toast(e.message);return {ok:false,error:e.message}}}
 function flag(code){if(!/^[A-Z]{2}$/.test(code||''))return '🏳️';return [...code].map(x=>String.fromCodePoint(127397+x.charCodeAt(0))).join('')}
 function iso2(f){let p=f.properties;let s=p.ISO_A2||p.ISO_A2_EH||p.iso_a2||'';if(/^[A-Z]{2}$/.test(s))return s;const known={'United States of America':'US','Russia':'RU','South Korea':'KR','North Korea':'KP','Iran':'IR','Türkiye':'TR','Turkey':'TR','Czechia':'CZ','Vietnam':'VN','Venezuela':'VE','Bolivia':'BO','Tanzania':'TZ','Syria':'SY','Laos':'LA','Moldova':'MD','Democratic Republic of the Congo':'CD','Republic of the Congo':'CG','Ivory Coast':'CI','Côte d’Ivoire':'CI','Kosovo':'XK','Taiwan':'TW','Palestine':'PS'};return known[p.ADMIN||p.name]||''}
 function iso3(f){let p=f.properties;return p.ISO_A3||p.ADM0_A3||p['ISO3166-1-Alpha-3']||''}
@@ -189,14 +189,14 @@ async function renderWorldMap(){
 async function drawGlobe(){if(!geo){await loadGeo();if(!geo)return}await renderWorldMap()}
 async function loadProfile(){const d=await api('profile');if(!d.ok)return false;me=d.profile;$('userName').textContent=me.first_name||'فرمانده';$('ownerTools')?.classList.toggle('hide',String(me.telegram_id)!==OWNER_ID);if(!me.country_code){$('countryScreen').classList.remove('hide');$('lobby').classList.add('hide');$('appHeader').classList.add('hide');return true}$('countryScreen').classList.add('hide');$('lobby').classList.remove('hide');$('appHeader').classList.remove('hide');$('welcome').textContent=me.country_name+' — فرماندهی';$('countryName').textContent=me.country_name;$('countryHero').style.setProperty('--hero-image',"url('https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=1400&q=90')");$('armyPower').textContent=Number(me.military_power||0).toLocaleString('en-US');$('energyValue').textContent=Number(me.energy||0).toLocaleString('en-US');$('coins').textContent=Number(me.coins).toLocaleString('en-US');$('level').textContent=me.level;$('income').textContent=Number(me.income||0).toLocaleString('en-US');renderEconomy();loadShop();loadAnnouncements();loadGroups();loadPlayers();loadNews();if(geo)drawGlobe();return true}
 function renderEconomy(){const names=[['oil','🛢️','نفت'],['steel','🔩','فولاد'],['food','🌾','غذا'],['energy','⚡','انرژی']];$('resourceGrid').innerHTML=names.map(([k,i,n])=>'<div class="resource-chip"><span>'+i+'</span><small>'+n+'</small><b>'+Number(me[k]||0).toLocaleString('en-US')+'</b></div>').join('');$('economyGrid').innerHTML='<div class="item"><b>💰 خزانه ملی</b><small>'+Number(me.coins).toLocaleString('en-US')+' پول</small></div>'+names.map(([k,i,n])=>'<div class="item"><b>'+i+' '+n+'</b><small>'+Number(me[k]||0).toLocaleString('en-US')+' واحد</small></div>').join('')}
-let shopCooldownEndsAt=0,shopCooldownTicker=null;
+let shopCooldownEndsAt=0,shopCooldownTicker=null,shopPurchasePending=false;
 function updateShopCooldown(seconds){
  shopCooldownEndsAt=Date.now()+Math.max(0,Number(seconds)||0)*1000;
  if(shopCooldownTicker)clearInterval(shopCooldownTicker);
  const tick=()=>{
   const left=Math.max(0,Math.ceil((shopCooldownEndsAt-Date.now())/1000));
   document.querySelectorAll("#shopGrid [data-buy]").forEach(b=>{
-   b.disabled=left>0||b.dataset.pending==="1";
+   b.disabled=left>0||shopPurchasePending||b.dataset.pending==="1";
    b.textContent=left>0?("⏳ "+Math.floor(left/60)+":"+String(left%60).padStart(2,"0")):(b.dataset.pending==="1"?"در حال خرید...":"خرید");
   });
   const badge=$("shopCooldownStatus");
@@ -211,7 +211,7 @@ async function loadShop(){
  updateShopCooldown(d.cooldownSeconds||0);
  $("shopGrid").querySelectorAll("[data-buy]").forEach(b=>b.onclick=async()=>{
   if(Date.now()<shopCooldownEndsAt)return;
-  b.dataset.pending="1";b.disabled=true;b.textContent="در حال خرید...";
+  shopPurchasePending=true;b.dataset.pending="1";updateShopCooldown(0);b.disabled=true;b.textContent="در حال خرید...";
   const z=await api("shop/buy",{item:b.dataset.buy});
   b.dataset.pending="0";
   if(z.ok){toast("خرید انجام شد؛ همه خریدها تا ۱۰ دقیقه قفل شدند");updateShopCooldown(z.cooldownSeconds||600);await loadProfile()}
