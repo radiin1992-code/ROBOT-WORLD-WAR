@@ -12,10 +12,10 @@ let mapTextureCache=null;
 const { Pool } = pg;
 const app = express();
 app.use(express.json({ limit: "7mb" }));
-app.use(express.static("public"));
+app.use(express.static("public",{setHeaders(res,filePath){if(filePath.endsWith(".html"))res.setHeader("Cache-Control","no-store, no-cache, must-revalidate");}}));
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.PGSSL === "true" ? { rejectUnauthorized: false } : undefined, max: 10, idleTimeoutMillis: 30000, connectionTimeoutMillis: 10000 });
 const OWNER_ID = "1852348620";
-const BUILD_VERSION = "rw-20261110-02";
+const BUILD_VERSION = "rw-20261111-01";
 const BOT_TOKEN = process.env.BOT_TOKEN || "";
 const PUBLIC_URL = process.env.RENDER_EXTERNAL_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? "https://" + process.env.RAILWAY_PUBLIC_DOMAIN : "");
 const MINI_APP_URL = process.env.MINI_APP_URL || PUBLIC_URL;
@@ -179,8 +179,8 @@ app.get("/api/profile",auth,async(req,res)=>{
   await applyProduction(req.user.id);
   const q=await pool.query("SELECT * FROM players WHERE telegram_id=$1",[String(req.user.id)]);
   const p=q.rows[0];
-  const military=await pool.query("SELECT COALESCE(SUM(m.quantity * CASE m.unit_type WHEN 'infantry' THEN 100 WHEN 'armor' THEN 180 WHEN 'air' THEN 260 WHEN 'navy' THEN 230 ELSE 0 END),0)::bigint AS power FROM military_units m WHERE m.telegram_id=$1",[String(req.user.id)]);
-  p.military_power=Number(military.rows[0]?.power||0);
+  const military=await pool.query("SELECT unit_type,quantity FROM military_units WHERE telegram_id=$1",[String(req.user.id)]);
+  p.military_power=military.rows.reduce((sum,row)=>sum+Number(row.quantity||0)*Number(UNIT_CATALOG[row.unit_type]?.power||0),0);
   p.income=Number(Math.max(0,(p.industry-1)*75+(p.agriculture-1)*45+(p.level-1)*30));p.gdp=Number(p.coins)*4;p.population=0;
   res.json({ok:true,profile:p});
 });
@@ -260,6 +260,23 @@ const UNIT_CATALOG = {
   air:{name:"یگان هوایی",icon:"✈️",quantity:5,cost:{coins:1250000,steel:90,food:15,energy:100,oil:110},power:260},
   navy:{name:"ناوگان دریایی",icon:"🚢",quantity:3,cost:{coins:1100000,steel:140,food:20,energy:65,oil:95},power:230}
 };
+const SUPPORT_CATEGORIES = [
+  {id:"logistics",name:"ترابری و زنجیره تأمین",icon:"🚚",models:["مرکز توزیع منطقه‌ای","سامانه باربری هوشمند","پایانه چندوجهی","انبار خودکار","ناوگان حمل‌ونقل پاک","سامانه رهگیری محموله","مرکز مدیریت موجودی","شبکه سردخانه‌ای","ایستگاه بارگیری سریع","سامانه زمان‌بندی مسیر"]},
+  {id:"engineering",name:"مهندسی و زیرساخت",icon:"🏗️",models:["پل ماژولار شهری","واحد تعمیر زیرساخت","سامانه پایش پل‌ها","مرکز بازسازی راه","کارگاه سازه پیش‌ساخته","شبکه نگهداری جاده","واحد نقشه‌برداری","مرکز مدیریت پروژه","سامانه بازرسی سازه","پایگاه خدمات عمرانی"]},
+  {id:"medical",name:"پزشکی و سلامت",icon:"🏥",models:["درمانگاه سیار","مرکز تله‌مدیسین","آزمایشگاه تشخیص سریع","واحد سلامت عمومی","سامانه پرونده سلامت","مرکز واکسیناسیون","بیمارستان ماژولار","واحد پشتیبانی دارویی","مرکز توان‌بخشی","شبکه امداد پزشکی"]},
+  {id:"communications",name:"ارتباطات و هماهنگی",icon:"📡",models:["شبکه ارتباطی امن","مرکز هماهنگی منطقه‌ای","سامانه پیام‌رسان اضطراری","ایستگاه ارتباط ماهواره‌ای","مرکز داده پشتیبان","شبکه فیبر نوری","سامانه هشدار عمومی","مرکز مدیریت تماس","گره ارتباطی سیار","سامانه همگام‌سازی اطلاعات"]},
+  {id:"energy",name:"انرژی و خدمات شهری",icon:"⚡",models:["میکروشبکه خورشیدی","واحد ذخیره انرژی","نیروگاه بادی محلی","سامانه مدیریت مصرف","ایستگاه شارژ عمومی","مرکز تعمیر شبکه برق","واحد بازیافت انرژی","شبکه توزیع هوشمند","سامانه پایش آب","تصفیه‌خانه ماژولار"]},
+  {id:"agriculture",name:"کشاورزی و غذا",icon:"🌱",models:["گلخانه هوشمند","مزرعه عمودی","مرکز بذر منطقه‌ای","سامانه آبیاری دقیق","واحد ذخیره غلات","کارخانه فرآوری غذا","شبکه توزیع محصولات","آزمایشگاه خاک","مرکز کنترل کیفیت غذا","سامانه پیش‌بینی برداشت"]},
+  {id:"research",name:"علم و فناوری",icon:"🔬",models:["آزمایشگاه مواد نو","مرکز پژوهش اقلیم","واحد رباتیک خدماتی","مرکز تحلیل داده","آزمایشگاه زیست‌فناوری","مرکز آموزش فنی","سامانه شبیه‌سازی شهری","واحد سنجش محیطی","مرکز نوآوری صنعتی","آزمایشگاه انرژی پاک"]},
+  {id:"rescue",name:"امداد و حفاظت شهری",icon:"🛟",models:["مرکز مدیریت بحران","واحد آتش‌نشانی شهری","سامانه پایش سیل","مرکز تخلیه اضطراری","واحد جست‌وجو و نجات","پناهگاه ماژولار","سامانه هشدار زلزله","مرکز اسکان موقت","واحد پاک‌سازی محیط","شبکه داوطلبان امداد"]}
+];
+const SUPPORT_SUFFIXES = ["نسل ۱","نسل ۲","نسل ۳","نسل ۴","نسل ۵"];
+const SUPPORT_CATALOG = Object.fromEntries(SUPPORT_CATEGORIES.flatMap(cat=>cat.models.flatMap((base,mi)=>SUPPORT_SUFFIXES.map((suffix,si)=>{
+  const n=mi*5+si+1;
+  const key="asset_"+cat.id+"_"+String(n).padStart(2,"0");
+  return [key,{name:base+" "+suffix,icon:cat.icon,category:cat.id,categoryName:cat.name,quantity:1,power:12+n*2,cost:{coins:140000+n*42000,steel:8+n*2,food:8+n,energy:5+Math.floor(n/2),oil:2+Math.floor(n/3)}}];
+}))));
+Object.assign(UNIT_CATALOG,SUPPORT_CATALOG);
 const BUILDING_CATALOG = {
   power:{name:"نیروگاه برق",icon:"⚡",cost:{coins:650000,steel:90,oil:35,energy:0},output:"هر ساعت ۳۰ برق"},
   refinery:{name:"پالایشگاه نفت",icon:"🛢️",cost:{coins:820000,steel:100,oil:0,energy:120},output:"هر ساعت ۱۲ نفت",needs:"نیروگاه سطح ۱"},
