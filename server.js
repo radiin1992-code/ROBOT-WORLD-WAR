@@ -15,7 +15,7 @@ app.use(express.json({ limit: "7mb" }));
 app.use(express.static("public",{setHeaders(res,filePath){if(filePath.endsWith(".html"))res.setHeader("Cache-Control","no-store, no-cache, must-revalidate");}}));
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.PGSSL === "true" ? { rejectUnauthorized: false } : undefined, max: 10, idleTimeoutMillis: 30000, connectionTimeoutMillis: 10000 });
 const OWNER_ID = "1852348620";
-const BUILD_VERSION = process.env.APP_RELEASE_VERSION || "rw-20261111-03";
+const BUILD_VERSION = process.env.APP_RELEASE_VERSION || "rw-20261111-04";
 const BOT_TOKEN = process.env.BOT_TOKEN || "";
 const PUBLIC_URL = process.env.RENDER_EXTERNAL_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? "https://" + process.env.RAILWAY_PUBLIC_DOMAIN : "");
 const MINI_APP_URL = process.env.MINI_APP_URL || PUBLIC_URL;
@@ -184,7 +184,7 @@ app.get("/api/profile",auth,async(req,res)=>{
   p.military_power=military.rows.reduce((sum,row)=>sum+Number(row.quantity||0)*Number(UNIT_CATALOG[row.unit_type]?.power||0),0);
   const ownedBuildings=await pool.query("SELECT building_type,level FROM national_buildings WHERE telegram_id=$1",[String(req.user.id)]);
   const buildingIncome=ownedBuildings.rows.reduce((sum,row)=>sum+Number(row.level||0)*Number(BUILDING_CATALOG[row.building_type]?.production?.coins||0),0);
-  p.income=Number(Math.max(0,(p.industry-1)*75+(p.agriculture-1)*45+(p.level-1)*30)+buildingIncome);p.gdp=Number(p.coins)*4;p.population=0;
+  p.income=Number(countryEconomy(p.country_code).income+Math.max(0,(p.industry-1)*75+(p.agriculture-1)*45+(p.level-1)*30)+buildingIncome);p.gdp=Number(p.coins)*4;p.population=0;
   res.json({ok:true,profile:p});
 });
 app.get("/api/news",auth,async(_req,res)=>{const q=await pool.query("SELECT id,message,created_at FROM world_news ORDER BY id DESC LIMIT 60");res.json({ok:true,items:q.rows});});
@@ -300,20 +300,65 @@ const BUILDING_CATALOG = {
   cargoport:{name:"بندر تجاری",icon:"⚓",cost:{coins:980000,steel:110,oil:30,energy:75},production:{coins:42000,energyNeed:3},output:"درآمد ۴۲٬۰۰۰ پول در ساعت"},
   airport:{name:"فرودگاه باربری",icon:"🛫",cost:{coins:1350000,steel:125,oil:45,energy:110},production:{coins:60000,energyNeed:5},output:"درآمد ۶۰٬۰۰۰ پول در ساعت"},
   datacenter:{name:"مرکز داده",icon:"🖥️",cost:{coins:1550000,steel:90,oil:25,energy:130},production:{coins:70000,energyNeed:6},output:"درآمد ۷۰٬۰۰۰ پول در ساعت"},
-  recycling:{name:"کارخانه بازیافت",icon:"♻️",cost:{coins:610000,steel:55,oil:10,energy:50},production:{steel:4,energyNeed:2},output:"تولید ۴ فولاد در ساعت"}
+  recycling:{name:"کارخانه بازیافت",icon:"♻️",cost:{coins:610000,steel:55,oil:10,energy:50},production:{steel:4,energyNeed:2},output:"تولید ۴ فولاد در ساعت"},
+  geothermal:{name:"نیروگاه زمین‌گرمایی",icon:"🌋",cost:{coins:980000,steel:110,oil:10,energy:0},production:{energy:32},output:"تولید ۳۲ برق در ساعت"},
+  nuclear:{name:"نیروگاه هسته‌ای بازی",icon:"☢️",cost:{coins:2400000,steel:260,oil:0,energy:0},production:{energy:85},output:"تولید ۸۵ برق در ساعت"},
+  tidal:{name:"نیروگاه جزرومدی",icon:"🌊",cost:{coins:1150000,steel:145,oil:0,energy:0},production:{energy:30},output:"تولید ۳۰ برق در ساعت"},
+  biomass:{name:"نیروگاه زیست‌توده",icon:"🍃",cost:{coins:690000,steel:75,oil:0,energy:0},production:{energy:20},output:"تولید ۲۰ برق در ساعت"},
+  wastepower:{name:"نیروگاه تبدیل پسماند",icon:"♻️",cost:{coins:850000,steel:95,oil:0,energy:0},production:{energy:25},output:"تولید ۲۵ برق در ساعت"},
+  solarpark:{name:"پارک خورشیدی بزرگ",icon:"🌞",cost:{coins:1450000,steel:160,oil:0,energy:0},production:{energy:58},output:"تولید ۵۸ برق در ساعت"},
+  offshorewind:{name:"مزرعه بادی فراساحلی",icon:"🌀",cost:{coins:1650000,steel:190,oil:0,energy:0},production:{energy:62},output:"تولید ۶۲ برق در ساعت"},
+  battery:{name:"مرکز ذخیره انرژی",icon:"🔋",cost:{coins:720000,steel:125,oil:0,energy:0},production:{energy:14},output:"افزایش ۱۴ واحد برق در ساعت در اقتصاد بازی"},
+  gasfield:{name:"میدان گاز طبیعی",icon:"🔥",cost:{coins:980000,steel:100,oil:0,energy:30},production:{oil:16,energyNeed:3},output:"تولید ۱۶ واحد سوخت در ساعت"},
+  petrochem:{name:"مجتمع پتروشیمی",icon:"🧪",cost:{coins:1320000,steel:145,oil:60,energy:100},production:{coins:72000,energyNeed:6},output:"درآمد ۷۲٬۰۰۰ پول در ساعت"},
+  factory:{name:"شهرک صنعتی",icon:"🏭",cost:{coins:1180000,steel:120,oil:30,energy:100},production:{coins:68000,steel:3,energyNeed:6},output:"درآمد ۶۸٬۰۰۰ پول و ۳ فولاد در ساعت"},
+  electronics:{name:"کارخانه قطعات الکترونیکی",icon:"🔌",cost:{coins:1480000,steel:130,oil:25,energy:140},production:{coins:88000,energyNeed:8},output:"درآمد ۸۸٬۰۰۰ پول در ساعت"},
+  software:{name:"مرکز توسعه نرم‌افزار",icon:"🧑‍💻",cost:{coins:1080000,steel:55,oil:10,energy:95},production:{coins:76000,energyNeed:5},output:"درآمد ۷۶٬۰۰۰ پول در ساعت"},
+  exchange:{name:"بورس و بازار سرمایه",icon:"📈",cost:{coins:1850000,steel:90,oil:10,energy:90},production:{coins:105000,energyNeed:5},output:"درآمد ۱۰۵٬۰۰۰ پول در ساعت"},
+  logistics:{name:"مرکز لجستیک",icon:"🚚",cost:{coins:920000,steel:100,oil:35,energy:65},production:{coins:52000,energyNeed:3},output:"درآمد ۵۲٬۰۰۰ پول در ساعت"},
+  containerport:{name:"پایانه کانتینری",icon:"🚢",cost:{coins:1380000,steel:160,oil:35,energy:100},production:{coins:79000,energyNeed:5},output:"درآمد ۷۹٬۰۰۰ پول در ساعت"},
+  university:{name:"دانشگاه ملی",icon:"🎓",cost:{coins:1250000,steel:85,oil:10,energy:75},production:{coins:48000,energyNeed:4},output:"درآمد ۴۸٬۰۰۰ پول در ساعت"},
+  hospital:{name:"شبکه بیمارستانی",icon:"🏥",cost:{coins:1120000,steel:105,oil:15,energy:85},production:{coins:43000,energyNeed:5},output:"درآمد ۴۳٬۰۰۰ پول در ساعت"},
+  desalination:{name:"تأسیسات آب‌شیرین‌کن",icon:"💧",cost:{coins:970000,steel:115,oil:0,energy:95},production:{food:8,energyNeed:5},output:"تولید ۸ غذا در ساعت"},
+  greenhouse:{name:"گلخانه هوشمند",icon:"🌱",cost:{coins:760000,steel:70,oil:0,energy:60},production:{food:28,energyNeed:3},output:"تولید ۲۸ غذا در ساعت"},
+  livestock:{name:"مجتمع دامپروری",icon:"🐄",cost:{coins:640000,steel:55,oil:0,energy:45},production:{food:22,energyNeed:2},output:"تولید ۲۲ غذا در ساعت"},
+  quarry:{name:"معدن سنگ و مواد خام",icon:"🪨",cost:{coins:690000,steel:40,oil:20,energy:55},production:{steel:12,energyNeed:3},output:"تولید ۱۲ فولاد در ساعت"},
+  lithium:{name:"معدن مواد پیشرفته",icon:"💎",cost:{coins:1280000,steel:100,oil:25,energy:100},production:{steel:18,energyNeed:6},output:"تولید ۱۸ فولاد در ساعت"},
+  media:{name:"شبکه رسانه‌ای",icon:"📡",cost:{coins:870000,steel:45,oil:10,energy:50},production:{coins:39000,energyNeed:2},output:"درآمد ۳۹٬۰۰۰ پول در ساعت"},
+  research:{name:"مرکز پژوهش و نوآوری",icon:"🔬",cost:{coins:1620000,steel:125,oil:15,energy:145},production:{coins:92000,energyNeed:7},output:"درآمد ۹۲٬۰۰۰ پول در ساعت"},
 };
+
+const COUNTRY_ECONOMY = {
+ USA:{income:98000,energy:42,oil:22,steel:14,food:25}, CHN:{income:92000,energy:48,oil:14,steel:32,food:34},
+ DEU:{income:88000,energy:32,oil:8,steel:22,food:16}, JPN:{income:85000,energy:35,oil:6,steel:18,food:12},
+ IND:{income:52000,energy:28,oil:10,steel:16,food:38}, GBR:{income:79000,energy:29,oil:12,steel:9,food:14},
+ FRA:{income:81000,energy:38,oil:7,steel:13,food:19}, RUS:{income:72000,energy:45,oil:35,steel:25,food:22},
+ CAN:{income:76000,energy:44,oil:28,steel:15,food:28}, BRA:{income:61000,energy:36,oil:18,steel:14,food:36},
+ AUS:{income:74000,energy:40,oil:24,steel:18,food:30}, KOR:{income:78000,energy:30,oil:5,steel:20,food:10},
+ ITA:{income:69000,energy:27,oil:8,steel:12,food:22}, ESP:{income:64000,energy:34,oil:7,steel:10,food:25},
+ TUR:{income:56000,energy:26,oil:9,steel:14,food:26}, SAU:{income:68000,energy:40,oil:48,steel:8,food:8},
+ IRN:{income:59000,energy:38,oil:42,steel:17,food:20}, IDN:{income:49000,energy:31,oil:16,steel:12,food:29},
+ MEX:{income:57000,energy:29,oil:20,steel:13,food:24}, NLD:{income:73000,energy:28,oil:11,steel:11,food:18},
+ NOR:{income:77000,energy:50,oil:38,steel:10,food:13}, CHE:{income:84000,energy:33,oil:4,steel:9,food:12},
+ ZAF:{income:45000,energy:24,oil:8,steel:19,food:18}, EGY:{income:39000,energy:25,oil:13,steel:9,food:23},
+ PAK:{income:35000,energy:19,oil:7,steel:8,food:28}, ARG:{income:47000,energy:27,oil:15,steel:10,food:33},
+ POL:{income:58000,energy:26,oil:8,steel:17,food:20}, SWE:{income:72000,energy:43,oil:5,steel:16,food:17},
+ ARE:{income:80000,energy:46,oil:32,steel:7,food:7}, NZL:{income:65000,energy:39,oil:5,steel:8,food:27}
+};
+function countryEconomy(code){return COUNTRY_ECONOMY[code]||{income:30000,energy:18,oil:5,steel:7,food:12};}
+
 async function applyProduction(id){
   const client=await pool.connect();
   try{
     await client.query("BEGIN");
-    const p=await client.query("SELECT coins,energy,oil,steel,food,production_at FROM players WHERE telegram_id=$1 FOR UPDATE",[String(id)]);
+    const p=await client.query("SELECT coins,energy,oil,steel,food,production_at,country_code FROM players WHERE telegram_id=$1 FOR UPDATE",[String(id)]);
     if(!p.rowCount){await client.query("ROLLBACK");return}
     const b=await client.query("SELECT building_type,level FROM national_buildings WHERE telegram_id=$1",[String(id)]);
     const levels=Object.fromEntries(b.rows.map(x=>[x.building_type,Number(x.level)]));
     const hours=Math.max(0,Math.min(24,(Date.now()-new Date(p.rows[0].production_at).getTime())/3600000));
     if(hours>=0.02){
-      let coins=Number(p.rows[0].coins),energy=Number(p.rows[0].energy),oil=Number(p.rows[0].oil),steel=Number(p.rows[0].steel),food=Number(p.rows[0].food);
-      for(const key of ["power","solar","wind","hydro"])energy+=hours*(levels[key]||0)*Number(BUILDING_CATALOG[key].production.energy||0);
+      const base=countryEconomy(p.rows[0].country_code); let coins=Number(p.rows[0].coins)+hours*base.income,energy=Number(p.rows[0].energy)+hours*base.energy,oil=Number(p.rows[0].oil)+hours*base.oil,steel=Number(p.rows[0].steel)+hours*base.steel,food=Number(p.rows[0].food)+hours*base.food;
+      for(const key of ["power","solar","wind","hydro","geothermal","nuclear","tidal","biomass","wastepower","solarpark","offshorewind","battery"])energy+=hours*(levels[key]||0)*Number(BUILDING_CATALOG[key].production.energy||0);
       for(const [key,item] of Object.entries(BUILDING_CATALOG)){
         const production=item.production||{},level=levels[key]||0;
         if(!level||production.energy)continue;
@@ -360,9 +405,9 @@ app.post("/api/army/build",auth,async(req,res)=>{
   const client=await pool.connect(),c=item.cost;
   try{
     await client.query("BEGIN");
-    const isEnergySource=["power","solar","wind","hydro"].includes(type);
+    const isEnergySource=["power","solar","wind","hydro","geothermal","nuclear","tidal","biomass","wastepower","solarpark","offshorewind","battery"].includes(type);
     if(!isEnergySource){
-      const sources=await client.query("SELECT COALESCE(SUM(level),0)::int AS level FROM national_buildings WHERE telegram_id=$1 AND building_type IN ('power','solar','wind','hydro')",[String(req.user.id)]);
+      const sources=await client.query("SELECT COALESCE(SUM(level),0)::int AS level FROM national_buildings WHERE telegram_id=$1 AND building_type IN ('power','solar','wind','hydro','geothermal','nuclear','tidal','biomass','wastepower','solarpark','offshorewind','battery')",[String(req.user.id)]);
       if(Number(sources.rows[0]?.level||0)<1){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"اول یک نیروگاه برق، خورشیدی، بادی یا آبی بساز."})}
     }
     const q=await client.query("UPDATE players SET coins=coins-$1,steel=steel-$2,oil=oil-$3,energy=energy-$4,updated_at=NOW() WHERE telegram_id=$5 AND country_code IS NOT NULL AND coins >= $1 AND steel >= $2 AND oil >= $3 AND energy >= $4 RETURNING telegram_id",[c.coins,c.steel,c.oil,c.energy,String(req.user.id)]);
