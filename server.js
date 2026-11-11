@@ -15,7 +15,7 @@ app.use(express.json({ limit: "7mb" }));
 app.use(express.static("public",{setHeaders(res,filePath){if(filePath.endsWith(".html"))res.setHeader("Cache-Control","no-store, no-cache, must-revalidate");}}));
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.PGSSL === "true" ? { rejectUnauthorized: false } : undefined, max: 10, idleTimeoutMillis: 30000, connectionTimeoutMillis: 10000 });
 const OWNER_ID = "1852348620";
-const BUILD_VERSION = "rw-20261111-02";
+const BUILD_VERSION = "rw-20261111-03";
 const BOT_TOKEN = process.env.BOT_TOKEN || "";
 const PUBLIC_URL = process.env.RENDER_EXTERNAL_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? "https://" + process.env.RAILWAY_PUBLIC_DOMAIN : "");
 const MINI_APP_URL = process.env.MINI_APP_URL || PUBLIC_URL;
@@ -182,7 +182,9 @@ app.get("/api/profile",auth,async(req,res)=>{
   const p=q.rows[0];
   const military=await pool.query("SELECT unit_type,quantity FROM military_units WHERE telegram_id=$1",[String(req.user.id)]);
   p.military_power=military.rows.reduce((sum,row)=>sum+Number(row.quantity||0)*Number(UNIT_CATALOG[row.unit_type]?.power||0),0);
-  p.income=Number(Math.max(0,(p.industry-1)*75+(p.agriculture-1)*45+(p.level-1)*30));p.gdp=Number(p.coins)*4;p.population=0;
+  const ownedBuildings=await pool.query("SELECT building_type,level FROM national_buildings WHERE telegram_id=$1",[String(req.user.id)]);
+  const buildingIncome=ownedBuildings.rows.reduce((sum,row)=>sum+Number(row.level||0)*Number(BUILDING_CATALOG[row.building_type]?.production?.coins||0),0);
+  p.income=Number(Math.max(0,(p.industry-1)*75+(p.agriculture-1)*45+(p.level-1)*30)+buildingIncome);p.gdp=Number(p.coins)*4;p.population=0;
   res.json({ok:true,profile:p});
 });
 app.get("/api/news",auth,async(_req,res)=>{const q=await pool.query("SELECT id,message,created_at FROM world_news ORDER BY id DESC LIMIT 60");res.json({ok:true,items:q.rows});});
@@ -279,30 +281,50 @@ const SUPPORT_CATALOG = Object.fromEntries(SUPPORT_CATEGORIES.flatMap(cat=>cat.m
 }))));
 Object.assign(UNIT_CATALOG,SUPPORT_CATALOG);
 const BUILDING_CATALOG = {
-  power:{name:"نیروگاه برق",icon:"⚡",cost:{coins:650000,steel:90,oil:35,energy:0},output:"هر ساعت ۳۰ برق"},
-  refinery:{name:"پالایشگاه نفت",icon:"🛢️",cost:{coins:820000,steel:100,oil:0,energy:120},output:"هر ساعت ۱۲ نفت",needs:"نیروگاه سطح ۱"},
-  steelworks:{name:"کارخانه فولاد",icon:"🏭",cost:{coins:950000,steel:60,oil:45,energy:150},output:"هر ساعت ۱۰ فولاد",needs:"نیروگاه سطح ۱"},
-  farm:{name:"مزرعه صنعتی",icon:"🌾",cost:{coins:480000,steel:35,oil:0,energy:55},output:"هر ساعت ۱۸ غذا",needs:"نیروگاه سطح ۱"}
+  power:{name:"نیروگاه برق",icon:"⚡",cost:{coins:650000,steel:90,oil:35,energy:0},production:{energy:30},output:"تولید ۳۰ برق در ساعت"},
+  solar:{name:"مزرعه خورشیدی",icon:"☀️",cost:{coins:520000,steel:65,oil:0,energy:0},production:{energy:22},output:"تولید ۲۲ برق در ساعت"},
+  wind:{name:"نیروگاه بادی",icon:"🌬️",cost:{coins:580000,steel:75,oil:0,energy:0},production:{energy:24},output:"تولید ۲۴ برق در ساعت"},
+  hydro:{name:"نیروگاه آبی",icon:"💧",cost:{coins:880000,steel:130,oil:20,energy:0},production:{energy:28},output:"تولید ۲۸ برق در ساعت"},
+  oilfield:{name:"میدان استخراج نفت",icon:"🛢️",cost:{coins:760000,steel:85,oil:15,energy:35},production:{oil:9,energyNeed:2},output:"تولید ۹ نفت در ساعت"},
+  refinery:{name:"پالایشگاه نفت",icon:"🏭",cost:{coins:820000,steel:100,oil:0,energy:120},production:{oil:12,energyNeed:4},output:"تولید ۱۲ نفت در ساعت"},
+  mine:{name:"معدن فولاد",icon:"⛏️",cost:{coins:720000,steel:45,oil:35,energy:45},production:{steel:8,energyNeed:4},output:"تولید ۸ فولاد در ساعت"},
+  steelworks:{name:"کارخانه فولاد",icon:"🏗️",cost:{coins:950000,steel:60,oil:45,energy:150},production:{steel:10,energyNeed:6},output:"تولید ۱۰ فولاد در ساعت"},
+  farm:{name:"مزرعه صنعتی",icon:"🌾",cost:{coins:480000,steel:35,oil:0,energy:55},production:{food:18,energyNeed:3},output:"تولید ۱۸ غذا در ساعت"},
+  fishery:{name:"مرکز پرورش آبزیان",icon:"🐟",cost:{coins:390000,steel:28,oil:0,energy:35},production:{food:12,energyNeed:2},output:"تولید ۱۲ غذا در ساعت"},
+  commercial:{name:"منطقه تجاری",icon:"🏙️",cost:{coins:900000,steel:75,oil:20,energy:65},production:{coins:45000,energyNeed:3},output:"درآمد ۴۵٬۰۰۰ پول در ساعت"},
+  mall:{name:"مجتمع خرید",icon:"🛍️",cost:{coins:1250000,steel:95,oil:25,energy:90},production:{coins:65000,energyNeed:5},output:"درآمد ۶۵٬۰۰۰ پول در ساعت"},
+  tourism:{name:"مجموعه گردشگری",icon:"🏝️",cost:{coins:1050000,steel:65,oil:15,energy:55},production:{coins:55000,energyNeed:3},output:"درآمد ۵۵٬۰۰۰ پول در ساعت"},
+  hotel:{name:"هتل بین‌المللی",icon:"🏨",cost:{coins:680000,steel:48,oil:10,energy:40},production:{coins:38000,energyNeed:2},output:"درآمد ۳۸٬۰۰۰ پول در ساعت"},
+  bank:{name:"مرکز خدمات مالی",icon:"🏦",cost:{coins:1450000,steel:85,oil:20,energy:80},production:{coins:80000,energyNeed:4},output:"درآمد ۸۰٬۰۰۰ پول در ساعت"},
+  techpark:{name:"شهرک فناوری",icon:"💻",cost:{coins:1750000,steel:120,oil:35,energy:150},production:{coins:95000,energyNeed:8},output:"درآمد ۹۵٬۰۰۰ پول در ساعت"},
+  cargoport:{name:"بندر تجاری",icon:"⚓",cost:{coins:980000,steel:110,oil:30,energy:75},production:{coins:42000,energyNeed:3},output:"درآمد ۴۲٬۰۰۰ پول در ساعت"},
+  airport:{name:"فرودگاه باربری",icon:"🛫",cost:{coins:1350000,steel:125,oil:45,energy:110},production:{coins:60000,energyNeed:5},output:"درآمد ۶۰٬۰۰۰ پول در ساعت"},
+  datacenter:{name:"مرکز داده",icon:"🖥️",cost:{coins:1550000,steel:90,oil:25,energy:130},production:{coins:70000,energyNeed:6},output:"درآمد ۷۰٬۰۰۰ پول در ساعت"},
+  recycling:{name:"کارخانه بازیافت",icon:"♻️",cost:{coins:610000,steel:55,oil:10,energy:50},production:{steel:4,energyNeed:2},output:"تولید ۴ فولاد در ساعت"}
 };
 async function applyProduction(id){
   const client=await pool.connect();
   try{
     await client.query("BEGIN");
-    const p=await client.query("SELECT energy,oil,steel,food,production_at FROM players WHERE telegram_id=$1 FOR UPDATE",[String(id)]);
+    const p=await client.query("SELECT coins,energy,oil,steel,food,production_at FROM players WHERE telegram_id=$1 FOR UPDATE",[String(id)]);
     if(!p.rowCount){await client.query("ROLLBACK");return}
     const b=await client.query("SELECT building_type,level FROM national_buildings WHERE telegram_id=$1",[String(id)]);
     const levels=Object.fromEntries(b.rows.map(x=>[x.building_type,Number(x.level)]));
     const hours=Math.max(0,Math.min(24,(Date.now()-new Date(p.rows[0].production_at).getTime())/3600000));
     if(hours>=0.02){
-      let energy=Number(p.rows[0].energy),oil=Number(p.rows[0].oil),steel=Number(p.rows[0].steel),food=Number(p.rows[0].food);
-      energy+=hours*(levels.power||0)*30;
-      const refinery=Math.min(levels.refinery||0,Math.floor(energy/(hours*4||1)));
-      const steelworks=Math.min(levels.steelworks||0,Math.floor(energy/(hours*6||1)));
-      const farm=Math.min(levels.farm||0,Math.floor(energy/(hours*3||1)));
-      const used=hours*(refinery*4+steelworks*6+farm*3);
-      energy=Math.max(0,energy-used);
-      oil+=hours*refinery*12;steel+=hours*steelworks*10;food+=hours*farm*18;
-      await client.query("UPDATE players SET energy=$1,oil=$2,steel=$3,food=$4,production_at=NOW() WHERE telegram_id=$5",[Math.floor(energy),Math.floor(oil),Math.floor(steel),Math.floor(food),String(id)]);
+      let coins=Number(p.rows[0].coins),energy=Number(p.rows[0].energy),oil=Number(p.rows[0].oil),steel=Number(p.rows[0].steel),food=Number(p.rows[0].food);
+      for(const key of ["power","solar","wind","hydro"])energy+=hours*(levels[key]||0)*Number(BUILDING_CATALOG[key].production.energy||0);
+      for(const [key,item] of Object.entries(BUILDING_CATALOG)){
+        const production=item.production||{},level=levels[key]||0;
+        if(!level||production.energy)continue;
+        const need=Number(production.energyNeed||0),active=need>0?Math.min(level,energy/(hours*need)):level;
+        if(need>0)energy=Math.max(0,energy-hours*active*need);
+        if(production.coins)coins+=hours*active*production.coins;
+        if(production.oil)oil+=hours*active*production.oil;
+        if(production.steel)steel+=hours*active*production.steel;
+        if(production.food)food+=hours*active*production.food;
+      }
+      await client.query("UPDATE players SET coins=$1,energy=$2,oil=$3,steel=$4,food=$5,production_at=NOW() WHERE telegram_id=$6",[Math.floor(coins),Math.floor(energy),Math.floor(oil),Math.floor(steel),Math.floor(food),String(id)]);
     }
     await client.query("COMMIT");
   }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
