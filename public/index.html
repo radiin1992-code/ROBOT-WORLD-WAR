@@ -200,7 +200,7 @@ function updateShopCooldown(seconds){
    b.textContent=left>0?("⏳ "+Math.floor(left/60)+":"+String(left%60).padStart(2,"0")):(b.dataset.pending==="1"?"در حال خرید...":"خرید");
   });
   const badge=$("shopCooldownStatus");
-  if(badge)badge.textContent=left>0?("⏳ زمان باقی‌مانده برای تمام خریدها: "+Math.floor(left/60)+":"+String(left%60).padStart(2,"0")):"✅ خریدها آزاد هستند";
+  if(badge)badge.textContent=shopPurchasePending?"در حال ثبت خرید...":left>0?("⏳ زمان باقی‌مانده برای تمام خریدها: "+Math.floor(left/60)+":"+String(left%60).padStart(2,"0")):"✅ خریدها آزاد هستند";
   if(left<=0&&shopCooldownTicker){clearInterval(shopCooldownTicker);shopCooldownTicker=null}
  };
  tick();if(seconds>0)shopCooldownTicker=setInterval(tick,250);
@@ -213,7 +213,7 @@ async function loadShop(){
   if(Date.now()<shopCooldownEndsAt)return;
   shopPurchasePending=true;b.dataset.pending="1";updateShopCooldown(0);b.disabled=true;b.textContent="در حال خرید...";
   const z=await api("shop/buy",{item:b.dataset.buy});
-  b.dataset.pending="0";
+  b.dataset.pending="0";shopPurchasePending=false;
   if(z.ok){toast("خرید انجام شد؛ همه خریدها تا ۱۰ دقیقه قفل شدند");updateShopCooldown(z.cooldownSeconds||600);await loadProfile()}
   else if(z.cooldownSeconds){updateShopCooldown(z.cooldownSeconds)}
   else {b.disabled=false;b.textContent="خرید"}
