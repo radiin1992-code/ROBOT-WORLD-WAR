@@ -1,4 +1,4 @@
-name: Validate game source
+name: Validate game source and realistic map
 
 on:
   push:
