@@ -743,7 +743,7 @@ app.post("/api/battles/launch",auth,async(req,res)=>{
   if(!defenderCountry){await client.query("ROLLBACK");return res.status(404).json({ok:false,error:"کد کشور مدافع پیدا نشد."})}
   const sectorLat=Number(sectorInput.lat),sectorLng=Number(sectorInput.lng);
   if(!pointInCountry(defenderCountry,sectorLng,sectorLat)){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"مختصات انتخابی داخل مرز کشور هدف نیست."})}
-  const sectorX=Math.floor((sectorLng+180)),sectorY=Math.floor((sectorLat+90)),sectorKey=defenderCountry+":"+sectorX+":"+sectorY;
+  const sectorX=Math.floor((sectorLng+180)*4),sectorY=Math.floor((sectorLat+90)*4),sectorKey=defenderCountry+":"+sectorX+":"+sectorY;
   const existingSector=await client.query("SELECT owner_id FROM territory_sectors WHERE sector_key=$1 FOR UPDATE",[sectorKey]);
   if(existingSector.rowCount&&String(existingSector.rows[0].owner_id)===attacker){await client.query("ROLLBACK");return res.status(409).json({ok:false,error:"این منطقه از قبل تحت کنترل کشور توست."})}
   if(existingSector.rowCount&&String(existingSector.rows[0].owner_id)!==target){await client.query("ROLLBACK");return res.status(409).json({ok:false,error:"این منطقه در حال حاضر تحت کنترل کشور دیگری است."})}
