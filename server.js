@@ -715,9 +715,11 @@ app.get("/api/shop",auth,async(req,res)=>{
 app.post("/api/shop/buy",auth,async(req,res)=>{
   const catalog={oil:{price:180000,amount:100,column:"oil",incomeBonus:3000},steel:{price:140000,amount:100,column:"steel",incomeBonus:2500},food:{price:90000,amount:250,column:"food",incomeBonus:2000},energy:{price:160000,amount:100,column:"energy",incomeBonus:3000},industry:{price:1200000,amount:1,column:"industry",incomeBonus:200000},agriculture:{price:850000,amount:1,column:"agriculture",incomeBonus:120000},technology:{price:1800000,amount:1,column:"technology",incomeBonus:250000}};
   const item=catalog[req.body?.item];
-  const quantity=Number(req.body?.quantity??1);
+  const rawQuantity=req.body?.quantity??1;
+  const quantityText=String(rawQuantity).replace(/[۰-۹]/g,d=>String("۰۱۲۳۴۵۶۷۸۹".indexOf(d))).replace(/[٠-٩]/g,d=>String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).replace(/[٬,\s]/g,"");
+  const quantity=Number(quantityText);
   if(!item)return res.status(400).json({ok:false,error:"کالای نامعتبر."});
-  if(!Number.isSafeInteger(quantity)||quantity<1||quantity>1000000)return res.status(400).json({ok:false,error:"تعداد خرید معتبر نیست."});
+  if(!Number.isSafeInteger(quantity)||quantity<1||quantity>1000000)return res.status(400).json({ok:false,error:"تعداد خرید معتبر نیست. عددی بین ۱ تا ۱٬۰۰۰٬۰۰۰ وارد کن."});
   const totalPrice=item.price*quantity,totalAmount=item.amount*quantity,totalIncome=item.incomeBonus*quantity;
   if(!Number.isSafeInteger(totalPrice)||!Number.isSafeInteger(totalAmount)||!Number.isSafeInteger(totalIncome))return res.status(400).json({ok:false,error:"تعداد خرید بیش از حد مجاز است."});
   const q=await pool.query(`UPDATE players SET coins=coins-$1,${item.column}=${item.column}+$2,shop_income=shop_income+$3,updated_at=NOW() WHERE telegram_id=$4 AND country_code IS NOT NULL AND coins >= $1 RETURNING coins`,[totalPrice,totalAmount,totalIncome,String(req.user.id)]);
