@@ -273,8 +273,8 @@ function renderArmyCatalog(d){
  $("armyUnits").querySelectorAll("[data-batches]").forEach(input=>{
   const key=input.dataset.batches,x=catalog[key],cost=x.cost||{};
   const keys=["coins","steel","food","energy","oil"],limits=keys.filter(k=>Number(cost[k]||0)>0).map(k=>Math.floor(Number(r[k]||0)/Number(cost[k]))),maxAffordable=Math.max(0,Math.min(1000000,...(limits.length?limits:[1000000])));
-  const update=()=>{const raw=String(input.value||"").trim(),valid=/^\\d+$/.test(raw),entered=valid?Number(raw):0,n=valid?Math.min(1000000,entered):0;const selected=$("armyUnits").querySelector('[data-selected-quantity="'+key+'"]'),totalBox=$("armyUnits").querySelector('[data-total="'+key+'"]'),buy=$("armyUnits").querySelector('[data-recruit="'+key+'"]');if(selected)selected.textContent=valid&&n>0?'تعداد انتخاب‌شده: '+fmt(n)+' عدد': 'تعداد انتخاب‌شده: وارد نشده';if(totalBox)totalBox.textContent=valid&&n>0?'هزینه کل: '+fmt(Number(cost.coins||0)*n)+' پول • '+fmt(Number(cost.steel||0)*n)+' فولاد • '+fmt(Number(cost.food||0)*n)+' غذا • '+fmt(Number(cost.energy||0)*n)+' برق • '+fmt(Number(cost.oil||0)*n)+' نفت':'تعداد یگان را وارد کن';if(buy){buy.disabled=!valid||n<1||entered>1000000||n>maxAffordable;buy.textContent=entered>1000000?'حداکثر ۱٬۰۰۰٬۰۰۰':n>maxAffordable?'منابع کافی نیست':'افزودن '+(n>0?fmt(n)+' عدد':'به کشور')}};
-  input.addEventListener("input",update);input.addEventListener("change",()=>{if(!String(input.value||"").trim())input.value="1";else if(/^\\d+$/.test(input.value))input.value=String(Math.min(1000000,Number(input.value)));update()});update();
+  const update=()=>{const raw=String(input.value||"").trim(),valid=/^\d+$/.test(raw),entered=valid?Number(raw):0,n=valid?Math.min(1000000,entered):0;const selected=$("armyUnits").querySelector('[data-selected-quantity="'+key+'"]'),totalBox=$("armyUnits").querySelector('[data-total="'+key+'"]'),buy=$("armyUnits").querySelector('[data-recruit="'+key+'"]');if(selected)selected.textContent=valid&&n>0?'تعداد انتخاب‌شده: '+fmt(n)+' عدد': 'تعداد انتخاب‌شده: وارد نشده';if(totalBox)totalBox.textContent=valid&&n>0?'هزینه کل: '+fmt(Number(cost.coins||0)*n)+' پول • '+fmt(Number(cost.steel||0)*n)+' فولاد • '+fmt(Number(cost.food||0)*n)+' غذا • '+fmt(Number(cost.energy||0)*n)+' برق • '+fmt(Number(cost.oil||0)*n)+' نفت':'تعداد یگان را وارد کن';if(buy){buy.disabled=!valid||n<1||entered>1000000||n>maxAffordable;buy.textContent=entered>1000000?'حداکثر ۱٬۰۰۰٬۰۰۰':n>maxAffordable?'منابع کافی نیست':'افزودن '+(n>0?fmt(n)+' عدد':'به کشور')}};
+  input.addEventListener("input",update);input.addEventListener("change",()=>{if(!String(input.value||"").trim())input.value="1";else if(/^\d+$/.test(input.value))input.value=String(Math.min(1000000,Number(input.value)));update()});update();
  });
  $("armyUnits").querySelectorAll("[data-max]").forEach(btn=>btn.onclick=()=>{
   const key=btn.dataset.max,x=catalog[key],cost=x.cost||{},keys=["coins","steel","food","energy","oil"];
@@ -291,7 +291,7 @@ function renderArmyCatalog(d){
   if(result.ok){toast("مدل حذف شد");await loadArmy();await loadProfile()}else{btn.disabled=false;toast(result.error||"حذف انجام نشد")}
  });
  $("armyUnits").querySelectorAll("[data-recruit]").forEach(btn=>btn.onclick=async()=>{
-  const key=btn.dataset.recruit,input=$("armyUnits").querySelector('[data-batches="'+key+'"]'),raw=String(input?.value||"").trim();if(!/^\\d+$/.test(raw)||Number(raw)<1||Number(raw)>1000000)return toast("تعداد معتبر بین ۱ تا ۱٬۰۰۰٬۰۰۰ وارد کن");const quantity=Number(raw);
+  const key=btn.dataset.recruit,input=$("armyUnits").querySelector('[data-batches="'+key+'"]'),raw=String(input?.value||"").trim();if(!/^\d+$/.test(raw)||Number(raw)<1||Number(raw)>1000000)return toast("تعداد معتبر بین ۱ تا ۱٬۰۰۰٬۰۰۰ وارد کن");const quantity=Number(raw);
   btn.disabled=true;const z=await api("army/recruit",{type:key,quantity});btn.disabled=false;
   if(z.ok){toast("تعداد "+Number(z.quantity).toLocaleString("en-US")+" به ارتش اضافه شد");await loadProfile();await loadArmy()}else toast(z.error||"افزودن انجام نشد");
  });
@@ -412,7 +412,7 @@ $('ownerResourceBtn')?.addEventListener('click',async()=>{const targetId=$('owne
 
 function switchView(name){document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('active',x.dataset.view===name));document.querySelectorAll('.bottom-nav button').forEach(x=>x.classList.toggle('active',x.dataset.view===name));document.querySelectorAll('.view').forEach(x=>x.classList.toggle('active',x.id===name));if(window.radinwarGlobe){if(name==='map')window.radinwarGlobe.resumeAnimation?.();else window.radinwarGlobe.pauseAnimation?.()}if(name==='map'){loadGeo().then(()=>drawGlobe());}if(name==='army'||name==='economy')loadArmy();if(name==='war'||name==='diplomacy')loadDiplomacy();if(name==='market')loadNews();if(name==='announcements')loadAnnouncements();if(name==='groups'){loadGroups();loadGroupInvitations();}if(name==='private')loadPlayers();window.scrollTo({top:0,behavior:'smooth'})}document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>switchView(b.dataset.view));
 const originalLoadPlayers=loadPlayers;loadPlayers=async()=>{await originalLoadPlayers();fillMemberSelect()};
-const CLIENT_BUILD_VERSION="rw-20261112-09";let updateReloadStarted=false;
+const CLIENT_BUILD_VERSION='rw-20261112-10';let updateReloadStarted=false;
 async function checkServerVersion(){
  if(updateReloadStarted||!INIT_DATA)return;
  try{
