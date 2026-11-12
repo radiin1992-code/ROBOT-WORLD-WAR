@@ -157,6 +157,8 @@ async function initDb() {
   await pool.query("ALTER TABLE players ADD COLUMN IF NOT EXISTS chat_id BIGINT");
   await pool.query("ALTER TABLE players ADD COLUMN IF NOT EXISTS country_flag TEXT");
   await pool.query("ALTER TABLE players ADD COLUMN IF NOT EXISTS production_at TIMESTAMPTZ NOT NULL DEFAULT NOW()");
+  await pool.query("ALTER TABLE players ADD COLUMN IF NOT EXISTS active_commander_id BIGINT");
+  await pool.query(`CREATE TABLE IF NOT EXISTS player_commanders (id BIGSERIAL PRIMARY KEY, telegram_id BIGINT NOT NULL REFERENCES players(telegram_id) ON DELETE CASCADE, commander_key TEXT NOT NULL, level INT NOT NULL DEFAULT 1 CHECK(level BETWEEN 1 AND 10), xp INT NOT NULL DEFAULT 0 CHECK(xp>=0), hired_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE(telegram_id,commander_key)); CREATE INDEX IF NOT EXISTS player_commanders_owner_idx ON player_commanders(telegram_id);`);
   await pool.query("ALTER TABLE players ADD COLUMN IF NOT EXISTS shop_income BIGINT NOT NULL DEFAULT 0");
   await pool.query("ALTER TABLE transactions ALTER COLUMN amount TYPE NUMERIC USING amount::numeric");
   await pool.query(`ALTER TABLE players
@@ -534,6 +536,48 @@ app.get("/api/army",auth,async(req,res)=>{
   for(const x of images.rows)if(catalog[x.unit_type])catalog[x.unit_type].imageUrl=x.image_url;
   for(const x of custom.rows)catalog[x.unit_type]={name:x.name,category:x.category,categoryName:x.category_name,icon:x.icon,imageUrl:x.image_url,quantity:Number(x.quantity),power:Number(x.power),gameAttack:Number(x.game_attack||x.power),gameDefense:Number(x.game_defense||Math.round(Number(x.power)*.55)),gameCapacity:Number(x.game_capacity||10),gameOperationCost:Number(x.game_operation_cost||1),gameCooldown:Number(x.game_cooldown||2),cost:{coins:Number(x.coins),steel:Number(x.steel),food:Number(x.food),energy:Number(x.energy),oil:Number(x.oil)}};
   res.json({ok:true,resources:p.rows[0],units,buildings,unitCatalog:catalog,buildingCatalog:BUILDING_CATALOG});
+});
+app.get("/api/commanders",auth,async(req,res)=>{
+ const id=String(req.user.id);
+ const [owned,player]=await Promise.all([pool.query("SELECT id,commander_key,level,xp,hired_at FROM player_commanders WHERE telegram_id=$1 ORDER BY hired_at,id",[id]),pool.query("SELECT active_commander_id FROM players WHERE telegram_id=$1",[id])]);
+ const byKey=new Map(owned.rows.map(x=>[x.commander_key,x]));
+ const activeId=player.rows[0]?.active_commander_id==null?null:String(player.rows[0].active_commander_id);
+ const commanders=COMMANDER_CATALOG.map(c=>{const o=byKey.get(c.key);return {...c,owned:!!o,id:o?String(o.id):null,level:o?Number(o.level):0,xp:o?Number(o.xp):0,active:!!o&&String(o.id)===activeId,nextXp:o?Number(o.level)*100:100}});
+ res.json({ok:true,commanders,activeId,ownedCount:owned.rows.length,maxSlots:3});
+});
+app.post("/api/commanders/hire",auth,async(req,res)=>{
+ const key=String(req.body?.key||""),def=COMMANDER_CATALOG.find(x=>x.key===key);
+ if(!def)return res.status(400).json({ok:false,error:"فرمانده معتبر نیست."});
+ const id=String(req.user.id),client=await pool.connect();
+ try{
+  await client.query("BEGIN");await client.query("SELECT telegram_id FROM players WHERE telegram_id=$1 FOR UPDATE",[id]);
+  const existing=await client.query("SELECT id FROM player_commanders WHERE telegram_id=$1 AND commander_key=$2",[id,key]);
+  if(existing.rowCount){await client.query("ROLLBACK");return res.status(409).json({ok:false,error:"این فرمانده را قبلاً استخدام کرده‌ای."})}
+  const count=await client.query("SELECT COUNT(*)::int AS n FROM player_commanders WHERE telegram_id=$1",[id]);
+  if(Number(count.rows[0].n)>=3){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"ظرفیت استخدام پر شده است؛ حداکثر ۳ فرمانده می‌توانی داشته باشی."})}
+  const c=def.cost,paid=await client.query("UPDATE players SET coins=coins-$1,oil=oil-$2,steel=steel-$3,energy=energy-$4 WHERE telegram_id=$5 AND coins>=$1 AND oil>=$2 AND steel>=$3 AND energy>=$4 RETURNING telegram_id",[c.coins,c.oil,c.steel,c.energy,id]);
+  if(!paid.rowCount){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"برای استخدام این فرمانده پول، نفت، فولاد یا انرژی کافی نداری."})}
+  const hired=await client.query("INSERT INTO player_commanders(telegram_id,commander_key) VALUES($1,$2) RETURNING id",[id,key]);
+  await client.query("COMMIT");res.json({ok:true,id:String(hired.rows[0].id)});
+ }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
+});
+app.post("/api/commanders/active",auth,async(req,res)=>{
+ const id=String(req.user.id),commanderId=req.body?.commander_id==null||req.body?.commander_id===""?null:String(req.body.commander_id);
+ if(commanderId!==null&&!/^\d+$/.test(commanderId))return res.status(400).json({ok:false,error:"شناسه فرمانده معتبر نیست."});
+ if(commanderId!==null){const owned=await pool.query("SELECT id FROM player_commanders WHERE id=$1 AND telegram_id=$2",[commanderId,id]);if(!owned.rowCount)return res.status(404).json({ok:false,error:"این فرمانده متعلق به تو نیست."})}
+ await pool.query("UPDATE players SET active_commander_id=$1 WHERE telegram_id=$2",[commanderId,id]);res.json({ok:true,activeId:commanderId});
+});
+app.post("/api/commanders/upgrade",auth,async(req,res)=>{
+ const commanderId=String(req.body?.commander_id||"");if(!/^\d+$/.test(commanderId))return res.status(400).json({ok:false,error:"فرمانده معتبر نیست."});
+ const id=String(req.user.id),client=await pool.connect();
+ try{
+  await client.query("BEGIN");const q=await client.query("SELECT id,level FROM player_commanders WHERE id=$1 AND telegram_id=$2 FOR UPDATE",[commanderId,id]);
+  if(!q.rowCount){await client.query("ROLLBACK");return res.status(404).json({ok:false,error:"فرمانده پیدا نشد."})}
+  const level=Number(q.rows[0].level);if(level>=10){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"فرمانده به حداکثر سطح رسیده است."})}
+  const cost={coins:20000*level,steel:30*level,energy:20*level},paid=await client.query("UPDATE players SET coins=coins-$1,steel=steel-$2,energy=energy-$3 WHERE telegram_id=$4 AND coins>=$1 AND steel>=$2 AND energy>=$3 RETURNING telegram_id",[cost.coins,cost.steel,cost.energy,id]);
+  if(!paid.rowCount){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"برای ارتقای فرمانده پول، فولاد یا انرژی کافی نداری."})}
+  await client.query("UPDATE player_commanders SET level=level+1 WHERE id=$1",[commanderId]);await client.query("COMMIT");res.json({ok:true,level:level+1,cost});
+ }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
 });
 app.post("/api/army/recruit",auth,async(req,res)=>{
   const type=String(req.body?.type||"");let item=UNIT_CATALOG[type];if(!item){const custom=await pool.query("SELECT name,icon,category,category_name,quantity,coins,steel,food,energy,oil,power,game_attack,game_defense,game_capacity,game_operation_cost,game_cooldown FROM custom_unit_catalog WHERE unit_type=$1",[type]);if(custom.rowCount){const x=custom.rows[0];item={name:x.name,icon:x.icon,category:x.category,categoryName:x.category_name,quantity:Number(x.quantity),power:Number(x.power),gameAttack:Number(x.game_attack||x.power),gameDefense:Number(x.game_defense||Math.round(Number(x.power)*.55)),gameCapacity:Number(x.game_capacity||10),gameOperationCost:Number(x.game_operation_cost||1),gameCooldown:Number(x.game_cooldown||2),cost:{coins:Number(x.coins),steel:Number(x.steel),food:Number(x.food),energy:Number(x.energy),oil:Number(x.oil)}}}}if(!item)return res.status(400).json({ok:false,error:"نوع یگان معتبر نیست."});
