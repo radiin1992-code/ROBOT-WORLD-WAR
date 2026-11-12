@@ -139,6 +139,17 @@ async function initDb() {
       id BIGSERIAL PRIMARY KEY, telegram_id BIGINT NOT NULL REFERENCES players(telegram_id) ON DELETE CASCADE,
       caption TEXT NOT NULL DEFAULT '', image_data TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    CREATE TABLE IF NOT EXISTS group_invitations (
+      id BIGSERIAL PRIMARY KEY,
+      group_id BIGINT NOT NULL REFERENCES game_groups(id) ON DELETE CASCADE,
+      telegram_id BIGINT NOT NULL REFERENCES players(telegram_id) ON DELETE CASCADE,
+      invited_by BIGINT NOT NULL REFERENCES players(telegram_id) ON DELETE CASCADE,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','accepted','rejected')),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      responded_at TIMESTAMPTZ
+    );
+    CREATE INDEX IF NOT EXISTS group_invitations_inbox_idx ON group_invitations(telegram_id,status,created_at DESC);
+    CREATE UNIQUE INDEX IF NOT EXISTS group_invitations_pending_unique_idx ON group_invitations(group_id,telegram_id) WHERE status='pending';
     CREATE INDEX IF NOT EXISTS group_messages_group_id_id_idx ON group_messages(group_id,id);
     CREATE INDEX IF NOT EXISTS direct_messages_pair_idx ON direct_messages(sender_id,receiver_id,id);
     CREATE INDEX IF NOT EXISTS announcements_id_idx ON announcements(id DESC);
@@ -516,15 +527,45 @@ app.post("/api/groups",auth,async(req,res)=>{
 });
 app.post("/api/groups/:id/members",auth,async(req,res)=>{
   const id=Number(req.params.id), target=String(req.body?.telegram_id||"");
-  const g=await pool.query("SELECT owner_id FROM game_groups WHERE id=$1",[id]);
+  if(!Number.isSafeInteger(id)||id<=0||!target||target===String(req.user.id))return res.status(400).json({ok:false,error:"بازیکن یا گروه معتبر نیست."});
+  const g=await pool.query("SELECT owner_id,name FROM game_groups WHERE id=$1",[id]);
   if(!g.rowCount)return res.status(404).json({ok:false,error:"گروه پیدا نشد."});
-  if(String(g.rows[0].owner_id)!==String(req.user.id))return res.status(403).json({ok:false,error:"فقط سازنده گروه می‌تونه عضو اضافه کنه."});
+  if(String(g.rows[0].owner_id)!==String(req.user.id))return res.status(403).json({ok:false,error:"فقط سازنده گروه می‌تونه دعوت بفرسته."});
   const p=await pool.query("SELECT telegram_id FROM players WHERE telegram_id=$1 AND country_code IS NOT NULL",[target]);
   if(!p.rowCount)return res.status(404).json({ok:false,error:"بازیکن پیدا نشد."});
-  await pool.query("INSERT INTO group_members(group_id,telegram_id) VALUES($1,$2) ON CONFLICT DO NOTHING",[id,target]);
+  const member=await pool.query("SELECT 1 FROM group_members WHERE group_id=$1 AND telegram_id=$2",[id,target]);
+  if(member.rowCount)return res.status(409).json({ok:false,error:"این بازیکن از قبل عضو گروهه."});
+  const pending=await pool.query("SELECT id FROM group_invitations WHERE group_id=$1 AND telegram_id=$2 AND status='pending'",[id,target]);
+  if(pending.rowCount)return res.status(409).json({ok:false,error:"درخواست این بازیکن قبلاً ارسال شده و هنوز پاسخ نداده."});
+  const invitation=await pool.query("INSERT INTO group_invitations(group_id,telegram_id,invited_by) VALUES($1,$2,$3) RETURNING id",[id,target,String(req.user.id)]);
   const inviter=await pool.query("SELECT country_name,first_name FROM players WHERE telegram_id=$1",[String(req.user.id)]);
-  await notifyPlayer(target,"👥 "+(inviter.rows[0]?.country_name||inviter.rows[0]?.first_name)+" تو را به یک گروه در radinwar💥 دعوت کرد.","groups",{group:id});
-  res.json({ok:true});
+  await notifyPlayer(target,"👥 "+(inviter.rows[0]?.country_name||inviter.rows[0]?.first_name)+" تو را به گروه «"+g.rows[0].name+"» دعوت کرده. از بخش ارتباطات درخواست رو قبول یا رد کن.","groups",{group:id});
+  res.json({ok:true,invitation_id:invitation.rows[0].id});
+});
+app.get("/api/group-invitations",auth,async(req,res)=>{
+  const q=await pool.query("SELECT i.id,i.group_id,i.created_at,g.name AS group_name,p.first_name AS inviter_name,p.country_name AS inviter_country FROM group_invitations i JOIN game_groups g ON g.id=i.group_id JOIN players p ON p.telegram_id=i.invited_by WHERE i.telegram_id=$1 AND i.status='pending' ORDER BY i.created_at DESC",[String(req.user.id)]);
+  res.json({ok:true,invitations:q.rows});
+});
+app.post("/api/group-invitations/:id/respond",auth,async(req,res)=>{
+  const invitationId=Number(req.params.id), action=String(req.body?.action||"");
+  if(!Number.isSafeInteger(invitationId)||invitationId<=0||!["accept","reject"].includes(action))return res.status(400).json({ok:false,error:"درخواست یا پاسخ معتبر نیست."});
+  const client=await pool.connect();
+  try{
+    await client.query("BEGIN");
+    const q=await client.query("SELECT id,group_id,telegram_id,status FROM group_invitations WHERE id=$1 FOR UPDATE",[invitationId]);
+    if(!q.rowCount){await client.query("ROLLBACK");return res.status(404).json({ok:false,error:"درخواست پیدا نشد."})}
+    const inv=q.rows[0];
+    if(String(inv.telegram_id)!==String(req.user.id)){await client.query("ROLLBACK");return res.status(403).json({ok:false,error:"این درخواست برای حساب تو نیست."})}
+    if(inv.status!=="pending"){await client.query("ROLLBACK");return res.status(409).json({ok:false,error:"این درخواست قبلاً پاسخ داده شده."})}
+    if(action==="accept"){
+      await client.query("INSERT INTO group_members(group_id,telegram_id) VALUES($1,$2) ON CONFLICT DO NOTHING",[inv.group_id,String(req.user.id)]);
+      await client.query("UPDATE group_invitations SET status='accepted',responded_at=NOW() WHERE id=$1",[invitationId]);
+    }else{
+      await client.query("UPDATE group_invitations SET status='rejected',responded_at=NOW() WHERE id=$1",[invitationId]);
+    }
+    await client.query("COMMIT");
+    res.json({ok:true,accepted:action==="accept",group_id:inv.group_id});
+  }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
 });
 app.get("/api/groups/:id/messages",auth,async(req,res)=>{
   const id=Number(req.params.id), member=await pool.query("SELECT 1 FROM group_members WHERE group_id=$1 AND telegram_id=$2",[id,String(req.user.id)]);
