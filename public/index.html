@@ -334,7 +334,7 @@ $('ownerResourceBtn')?.addEventListener('click',async()=>{const targetId=$('owne
   if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>4500000)return toast('عکس باید PNG، JPG یا WEBP و کمتر از ۴.۵ مگابایت باشد');
   const btn=$('ownerAddUnitBtn');btn.disabled=true;
   try{
-   const imageUrl=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file)});
+   const bitmap=await createImageBitmap(file),scale=Math.min(1,1000/Math.max(bitmap.width,bitmap.height)),canvas=document.createElement("canvas");canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));canvas.getContext("2d").drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close?.();const imageUrl=canvas.toDataURL("image/jpeg",0.78);
    const num=id=>Number($(id).value);
    const payload={name:$('ownerUnitName').value.trim(),category:$('ownerUnitCategory').value,icon:$('ownerUnitIcon').value,imageUrl,quantity:num('ownerUnitQuantity'),power:num('ownerUnitPower'),coins:num('ownerUnitCoins'),steel:num('ownerUnitSteel'),food:num('ownerUnitFood'),energy:num('ownerUnitEnergy'),oil:num('ownerUnitOil')};
    const d=await api('owner/unit-catalog',payload);
