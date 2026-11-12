@@ -27,7 +27,7 @@ if (!server.includes("registerWorldSystems") || !server.includes("initWorldSyste
 if (!systems.includes("/api/player-market") || !systems.includes("/api/research") || !systems.includes("/api/espionage/launch") || !systems.includes("/api/season")) throw new Error("A major world system route is missing.");
 for (const tech of ["industry","energy","agriculture","materials","intelligence","logistics","military","aviation","defense"]) if (!systems.includes(`id:"${tech}"`)) throw new Error("Technology missing: " + tech);
 if (!server.includes("attackerTech.military") || !server.includes("attackerTech.aviation") || !server.includes("defenderTech.defense")) throw new Error("Combat technologies are not applied to battle calculations.");
-if (!systems.includes("tech.industry") || !systems.includes("tech.agriculture") || !systems.includes("tech.materials") || !systems.includes("tech.energy")) throw new Error("Economic technologies are not applied to production.");
+if (!server.includes("tech.industry") || !server.includes("tech.agriculture") || !server.includes("tech.materials") || !server.includes("tech.energy")) throw new Error("Economic technologies are not applied to production.");
 const scripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map(match => match[1]).filter(code => code.trim());
 const temp = mkdtempSync(join(tmpdir(), "radinwar-check-"));
 try {
