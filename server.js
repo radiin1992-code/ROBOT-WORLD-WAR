@@ -230,6 +230,8 @@ async function initDb() {
   if (!n.rows[0].n) await pool.query("INSERT INTO world_news(message) VALUES ($1),($2),($3)", ["شبکه جهانی radinwar💥 راه‌اندازی شد.", "بازار جهانی آماده معامله است.", "فرماندهان جدید می‌توانند کشور خود را انتخاب کنند."]);
   const updateNotice=await pool.query("INSERT INTO game_settings(setting_key,setting_value) VALUES('game_update_notice_20261112_v1','sent') ON CONFLICT(setting_key) DO NOTHING RETURNING setting_key");
   if(updateNotice.rowCount) await publishWorldEvent("📢 بازی آپدیت شد!\n\n💰 موجودی همه فرمانده‌ها روی ۱۰٬۰۰۰ پول تنظیم شد و درآمد پایه به ۳۰۰ پول در دقیقه تغییر کرد.\n🔄 اگر داخل بازی هستی، مینی‌اپ به‌صورت خودکار فقط یک‌بار ریلود می‌شود. اگر ریلود خودکار انجام نشد، یک‌بار صفحه را تازه کن.");
+  const rewardNotice=await pool.query("INSERT INTO game_settings(setting_key,setting_value) VALUES('game_update_notice_20261112_v3','sent') ON CONFLICT(setting_key) DO NOTHING RETURNING setting_key");
+  if(rewardNotice.rowCount) await publishWorldEvent("🎁 آپدیت جدید RADINWAR منتشر شد!\n\n🎁 جایزه روزانه به بازی اضافه شد.\n🔐 کدهای جایزه مخفی هم فعال شدند؛ کدها رو فقط از مدیرهای بازی دریافت کن.\n🛢️ تولید نفت، فولاد، غذا و انرژی ساختمان‌ها حالا دقیقه‌ای محاسبه میشه.\n🔄 مینی‌اپ یک‌بار برای دریافت نسخه جدید ریلود میشه.");
 }
 function safeEqual(a,b){const aa=Buffer.from(a),bb=Buffer.from(b);return aa.length===bb.length&&crypto.timingSafeEqual(aa,bb)}
 function verifyInitData(initData) {
@@ -268,10 +270,10 @@ app.get("/api/profile",auth,async(req,res)=>{
   p.military_power=military.rows.reduce((sum,row)=>sum+Number(row.quantity||0)*Number(UNIT_CATALOG[row.unit_type]?.power??powerByType[row.unit_type]??0),0);
   const ownedBuildings=await pool.query("SELECT building_type,level FROM national_buildings WHERE telegram_id=$1",[String(req.user.id)]);
   const buildingIncome=ownedBuildings.rows.reduce((sum,row)=>sum+Number(row.level||0)*Number(BUILDING_CATALOG[row.building_type]?.production?.coins||0),0);
-  p.income=300+Math.round(buildingIncome/60);p.gdp=Number(p.coins)*4;p.population=0;
+  p.income=300+Math.round(buildingIncome);p.gdp=Number(p.coins)*4;p.population=0;
   res.json({ok:true,profile:p});
 });
-app.get("/api/treasury",auth,async(req,res)=>{await applyProduction(req.user.id);const q=await pool.query("SELECT coins,country_code,industry,agriculture,level,shop_income FROM players WHERE telegram_id=$1",[String(req.user.id)]);if(!q.rowCount)return res.status(404).json({ok:false});const p=q.rows[0];const b=await pool.query("SELECT building_type,level FROM national_buildings WHERE telegram_id=$1",[String(req.user.id)]);const buildingIncome=b.rows.reduce((sum,row)=>sum+Number(row.level||0)*Number(BUILDING_CATALOG[row.building_type]?.production?.coins||0),0);const income=300+Math.round(buildingIncome/60);res.json({ok:true,coins:p.coins,income});});
+app.get("/api/treasury",auth,async(req,res)=>{await applyProduction(req.user.id);const q=await pool.query("SELECT coins,country_code,industry,agriculture,level,shop_income FROM players WHERE telegram_id=$1",[String(req.user.id)]);if(!q.rowCount)return res.status(404).json({ok:false});const p=q.rows[0];const b=await pool.query("SELECT building_type,level FROM national_buildings WHERE telegram_id=$1",[String(req.user.id)]);const buildingIncome=b.rows.reduce((sum,row)=>sum+Number(row.level||0)*Number(BUILDING_CATALOG[row.building_type]?.production?.coins||0),0);const income=300+Math.round(buildingIncome);res.json({ok:true,coins:p.coins,income});});
 app.get("/api/news",auth,async(_req,res)=>{const q=await pool.query("SELECT id,message,created_at FROM world_news ORDER BY id DESC LIMIT 60");res.json({ok:true,items:q.rows});});
 const mapGeoCache=localWorldGeoJSON;
 app.get("/api/map-data",(_req,res)=>res.set("Cache-Control","public, max-age=86400").json(mapGeoCache));
