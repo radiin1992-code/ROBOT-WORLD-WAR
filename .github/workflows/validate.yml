@@ -1,8 +1,8 @@
-name: Validate game source
+name: Validate game source and realistic map
 
 on:
   push:
-    branches: [main]
+    branches: [main, realistic-world-v2, feature/realistic-world-rebuild-2026]
   pull_request:
     branches: [main]
 
