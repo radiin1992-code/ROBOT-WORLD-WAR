@@ -202,6 +202,12 @@ header{background:linear-gradient(100deg,#071321f5,#142344f2 48%,#201637f2);box-
 @media(max-width:420px){.bottom-nav button{font-size:7px}.bottom-nav button span{font-size:16px}.bottom-nav button.active span{width:38px;height:38px}.cc-section-head{align-items:flex-start;flex-direction:column}.cc-section .grid{grid-template-columns:1fr 1fr}}
 @media(prefers-reduced-motion:reduce){.cc-card,.cc-card *{animation:none!important;transition:none!important}}
 
+
+.commander-selected{border-color:#69d9a3!important;color:#79e5b2!important;background:#15392f!important;opacity:1!important}
+.commander-dismiss{border-color:#a65e5e88!important;color:#f0aaaa!important;background:#4a202033!important}
+.commander-actions .btn small{display:block;font-size:9px;font-weight:500;opacity:.8;line-height:1.8}
+.commander-cost{overflow-wrap:anywhere}
+.commander-card button:disabled{opacity:.55;cursor:not-allowed}
 /* Military commanders academy */
 .commander-banner{background:radial-gradient(circle at 85% 15%,#8b6b2f55,transparent 34%),linear-gradient(125deg,#30213a,#14253b 60%,#102c3b)!important;border-color:#8d7549!important}
 .commander-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 0;background:linear-gradient(130deg,#1d2d45,#111d30)}
@@ -514,21 +520,62 @@ async function loadArmy(){
 
 async function loadCommanders(){
  const box=$("commanderGrid");if(!box)return;
- const d=await api("commanders");if(!d.ok)return;
- const owned=(d.commanders||[]).filter(x=>x.owned);
+ box.innerHTML='<div class="note">در حال دریافت اطلاعات فرماندهان...</div>';
+ const d=await api("commanders");if(!d.ok){box.innerHTML='<div class="note">دریافت اطلاعات فرماندهان ناموفق بود. دوباره وارد این بخش شو.</div>';return}
+ const owned=(d.commanders||[]).filter(x=>x.owned),active=owned.find(x=>x.active);
  $("commanderSlots").textContent=owned.length+" / "+(d.maxSlots||3);
- const active=owned.find(x=>x.active);
  $("activeCommanderName").textContent=active?active.name+" • سطح "+active.level:"بدون فرمانده";
+ const fmt=n=>Number(n||0).toLocaleString("en-US");
  box.innerHTML=(d.commanders||[]).map(c=>{
-  const level=Number(c.level||0),xp=Number(c.xp||0),next=Number(c.nextXp||100),progress=c.owned?Math.min(100,Math.round(xp/Math.max(1,next)*100)):0;
-  const effect=c.owned?c.effect.replace(/[۰-۹0-9]+٪/,Math.round(Number(c.base)+Number(c.perLevel)*(Math.max(1,level)-1))+"٪"):c.effect;
-  const cost=c.cost||{},fmt=n=>Number(n||0).toLocaleString("en-US");
-  return '<article class="commander-card '+(c.active?'active-commander':'')+'"><div class="commander-art"><img src="'+esc(c.image)+'" alt="'+esc(c.name)+'" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'"><span class="commander-fallback">'+esc(c.icon)+'</span><span class="commander-rank">'+(c.owned?'LEVEL '+level:'SPECIALIST')+'</span><span class="commander-art-icon">'+esc(c.icon)+'</span></div><div class="commander-body">'+(c.active?'<span class="commander-active-tag">● فرمانده فعال کشور</span>':'')+'<h3>'+esc(c.name)+'</h3><div class="commander-role">'+esc(c.role)+'</div><p class="commander-desc">'+esc(c.description)+'</p><div class="commander-effect">✨ '+esc(c.owned?effect:c.effect)+'</div>'+(c.owned?'<div class="commander-progress"><span style="width:'+progress+'%"></span></div><div class="commander-xp"><span>تجربه: '+fmt(xp)+'</span><span>'+(level>=10?'MAX':fmt(next)+' XP برای سطح بعد')+'</span></div><div class="commander-actions"><button class="btn '+(c.active?'':'primary')+'" data-commander-active="'+c.id+'">'+(c.active?'فرمانده فعال است':'انتخاب به‌عنوان فرمانده فعال')+'</button><button class="btn" data-commander-upgrade="'+c.id+'" '+(level>=10?'disabled':'')+'>'+(level>=10?'حداکثر سطح':'⬆️ ارتقا به سطح '+(level+1)+' • '+fmt(20000*level)+' پول، '+fmt(30*level)+' فولاد، '+fmt(20*level)+' انرژی')+'</button></div>':'<div class="commander-cost">هزینه استخدام: '+fmt(cost.coins)+' پول • '+fmt(cost.oil)+' نفت • '+fmt(cost.steel)+' فولاد • '+fmt(cost.energy)+' انرژی</div><div class="commander-actions"><button class="btn primary" data-commander-hire="'+c.key+'" '+(owned.length>=3?'disabled':'')+'>🎖️ استخدام فرمانده</button></div>')+'</div></article>';
+  const level=Number(c.level||0),xp=Number(c.xp||0),next=Number(c.nextXp||100);
+  const progress=c.owned&&level<10?Math.min(100,Math.round(xp/Math.max(1,next)*100)):c.owned?100:0;
+  const bonus=c.owned?Number(c.bonusPercent||c.base):Number(c.base);
+  const effect=c.effect.replace(/[۰-۹0-9]+٪/,Math.round(bonus)+"٪");
+  const cost=c.cost||{};
+  const hireCost=fmt(cost.coins)+" پول • "+fmt(cost.oil)+" نفت • "+fmt(cost.steel)+" فولاد • "+fmt(cost.energy)+" انرژی";
+  const upgradeCost=fmt(20000*level)+" پول • "+fmt(30*level)+" فولاد • "+fmt(20*level)+" انرژی";
+  return '<article class="commander-card '+(c.active?'active-commander':'')+'">'+
+   '<div class="commander-art"><img src="'+esc(c.image)+'" alt="'+esc(c.name)+'" loading="lazy"><span class="commander-fallback">'+esc(c.icon)+'</span><span class="commander-rank">'+(c.owned?'LEVEL '+level:'SPECIALIST')+'</span><span class="commander-art-icon">'+esc(c.icon)+'</span></div>'+
+   '<div class="commander-body">'+(c.active?'<span class="commander-active-tag">● فرمانده فعال کشور</span>':'')+
+   '<h3>'+esc(c.name)+'</h3><div class="commander-role">'+esc(c.role)+'</div>'+
+   '<p class="commander-desc">'+esc(c.description)+'</p><div class="commander-effect">✨ '+esc(effect)+'</div>'+
+   (c.owned?
+    '<div class="commander-progress"><span style="width:'+progress+'%"></span></div>'+
+    '<div class="commander-xp"><span>'+(level>=10?'سطح نهایی':'تجربه: '+fmt(xp)+' / '+fmt(next)+' XP')+'</span><span>'+(level>=10?'MAX':'سطح بعد: '+(level+1))+'</span></div>'+
+    '<div class="commander-cost">پاداش هر نبرد: '+(c.active?'۲۵ XP برای حمله و ۲۵ تا ۴۰ XP برای دفاع':'با فعال‌سازی، تجربه نبرد دریافت می‌کند')+'</div>'+
+    '<div class="commander-actions">'+
+     (c.active?'<button class="btn commander-selected" disabled>✓ فرمانده فعال</button>':'<button class="btn primary" data-commander-active="'+c.id+'">فعال‌سازی این فرمانده</button>')+
+     '<button class="btn" data-commander-upgrade="'+c.id+'" '+(level>=10?'disabled':'')+'>'+(level>=10?'حداکثر سطح':'⬆️ ارتقا به سطح '+(level+1))+' '+(level<10?'<small>'+upgradeCost+'</small>':'')+'</button>'+
+     '<button class="btn commander-dismiss" data-commander-dismiss="'+c.id+'">آزادسازی فرمانده • بازپرداخت ۲۵٪</button>'+
+    '</div>'
+    :
+    '<div class="commander-cost">هزینه استخدام: '+hireCost+'</div>'+
+    '<div class="commander-actions"><button class="btn primary" data-commander-hire="'+c.key+'" '+(owned.length>=3?'disabled':'')+'>🎖️ استخدام فرمانده</button></div>'
+   )+
+   '</div></article>';
  }).join("");
- box.querySelectorAll("[data-commander-hire]").forEach(b=>b.onclick=async()=>{if(!confirm("این فرمانده استخدام شود؟ هزینه از خزانه و منابع کشور کم می‌شود."))return;b.disabled=true;const z=await api("commanders/hire",{key:b.dataset.commanderHire});if(z.ok){toast("فرمانده با موفقیت استخدام شد");await loadProfile();await loadCommanders()}else{b.disabled=false;toast(z.error||"استخدام انجام نشد")}});
- box.querySelectorAll("[data-commander-active]").forEach(b=>b.onclick=async()=>{b.disabled=true;const z=await api("commanders/active",{commander_id:b.dataset.commanderActive});if(z.ok){toast("فرمانده فعال کشور تغییر کرد");await loadCommanders()}else{b.disabled=false;toast(z.error||"انتخاب انجام نشد")}});
- box.querySelectorAll("[data-commander-upgrade]").forEach(b=>b.onclick=async()=>{if(!confirm("ارتقای این فرمانده انجام شود؟"))return;b.disabled=true;const z=await api("commanders/upgrade",{commander_id:b.dataset.commanderUpgrade});if(z.ok){toast("فرمانده به سطح "+z.level+" رسید");await loadProfile();await loadCommanders()}else{b.disabled=false;toast(z.error||"ارتقا انجام نشد")}});
+ box.querySelectorAll(".commander-art img").forEach(img=>img.addEventListener("error",()=>{img.hidden=true;const fallback=img.nextElementSibling;if(fallback)fallback.style.display="grid"},{once:true}));
+ box.querySelectorAll("[data-commander-hire]").forEach(b=>b.onclick=async()=>{
+  if(!confirm("این فرمانده استخدام شود؟ هزینه منابع از خزانه کم می‌شود. اگر فرمانده فعالی نداشته باشی، این فرمانده خودکار فعال می‌شود."))return;
+  b.disabled=true;const z=await api("commanders/hire",{key:b.dataset.commanderHire});
+  if(z.ok){toast(z.autoActivated?"فرمانده استخدام و خودکار فعال شد":"فرمانده با موفقیت استخدام شد");await loadProfile();await loadCommanders()}else{b.disabled=false;toast(z.error||"استخدام انجام نشد")}
+ });
+ box.querySelectorAll("[data-commander-active]").forEach(b=>b.onclick=async()=>{
+  b.disabled=true;const z=await api("commanders/active",{commander_id:b.dataset.commanderActive});
+  if(z.ok){toast("فرمانده فعال کشور تغییر کرد");await loadCommanders();if($("war").classList.contains("active"))loadBattleForce()}else{b.disabled=false;toast(z.error||"انتخاب انجام نشد")}
+ });
+ box.querySelectorAll("[data-commander-upgrade]").forEach(b=>b.onclick=async()=>{
+  if(!confirm("ارتقای فرمانده انجام شود؟ اثر مهارت او بیشتر می‌شود."))return;
+  b.disabled=true;const z=await api("commanders/upgrade",{commander_id:b.dataset.commanderUpgrade});
+  if(z.ok){toast("فرمانده به سطح "+z.level+" رسید");await loadProfile();await loadCommanders();if($("war").classList.contains("active"))loadBattleForce()}else{b.disabled=false;toast(z.error||"ارتقا انجام نشد")}
+ });
+ box.querySelectorAll("[data-commander-dismiss]").forEach(b=>b.onclick=async()=>{
+  if(!confirm("این فرمانده آزاد شود؟ فقط ۲۵٪ هزینه استخدام اولیه برمی‌گردد و تمام تجربه و سطحش از بین می‌رود."))return;
+  b.disabled=true;const z=await api("commanders/dismiss",{commander_id:b.dataset.commanderDismiss});
+  if(z.ok){const r=z.refund||{};toast("فرمانده آزاد شد • بازپرداخت "+fmt(r.coins)+" پول");await loadProfile();await loadCommanders();if($("war").classList.contains("active"))loadBattleForce()}else{b.disabled=false;toast(z.error||"آزادسازی انجام نشد")}
+ });
 }
+
 let battleMapCountries=[],battleMapWars=[];
 function renderBattleMap(playerRows=[],activeWars=[],allRelations=[]){
  const box=$('battleMap');if(!box)return;
@@ -564,7 +611,11 @@ $('sendAlliance')?.addEventListener('click',async()=>{const target_id=$('allianc
 $('declareWar')?.addEventListener('click',async()=>{const target_id=$('warTarget').value;if(!target_id)return toast('کشور مقصد را انتخاب کن');if(!confirm('اعلان جنگ رسمی برای این کشور ثبت شود؟'))return;const d=await api('diplomacy',{action:'war',target_id});if(d.ok){toast('اعلان جنگ ثبت و ارسال شد');loadDiplomacy()}});
 
 async function loadBattleForce(){
- const info=$("battleCommanderInfo");if(info){const cd=await api("commanders");const active=cd.commanders?.find(x=>x.active);info.textContent=active?"🎖️ فرمانده فعال: "+active.name+" • سطح "+active.level+" | هزینه عملیات: هر ۱۰۰۰ یگان اعزامی ۱ نفت و ۱ انرژی؛ فرمانده لجستیک این هزینه را کاهش می‌دهد.":"🎖️ فرمانده فعالی انتخاب نشده است. برای دریافت مهارت‌های ویژه از بخش فرماندهان یکی را فعال کن. هزینه پایه عملیات: هر ۱۰۰۰ یگان، ۱ نفت و ۱ انرژی."}
+ const info=$("battleCommanderInfo");if(info){
+  const cd=await api("commanders"),active=cd.commanders?.find(x=>x.active);
+  if(active){const pct=Math.round(Number(active.bonusPercent||active.base));const effect=active.effect.replace(/[۰-۹0-9]+٪/,pct+"٪");info.textContent="🎖️ فرمانده فعال: "+active.name+" • سطح "+active.level+" | اثر فعلی: "+effect+" | هزینه پایه عملیات: هر ۱۰۰۰ یگان، ۱ نفت و ۱ انرژی. فرمانده لجستیک هزینه را کاهش می‌دهد؛ فرمانده فعال کشور مدافع هم خودکار در دفاع اثر می‌گذارد."}
+  else info.textContent="🎖️ هنوز فرمانده فعالی نداری. از آکادمی یک فرمانده استخدام و فعال کن. هزینه پایه عملیات: هر ۱۰۰۰ یگان، ۱ نفت و ۱ انرژی.";
+ }
  const box=$('battleForce');if(!box)return;const d=await api('army');if(!d.ok)return;
  const entries=Object.entries(d.unitCatalog||{}).filter(([k])=>Number(d.units?.[k]||0)>0);
  box.innerHTML=entries.map(([k,x])=>'<label class="panel" style="padding:9px;display:block"><b>'+esc(x.icon||'🧩')+' '+esc(x.name)+'</b><small style="display:block">موجودی: '+Number(d.units[k]).toLocaleString('en-US')+' • قدرت: '+Number(x.gameAttack||x.power||1)+'</small><input class="field" type="number" min="0" max="'+Number(d.units[k])+'" value="0" step="1" data-battle-force="'+esc(k)+'" style="margin-top:6px"></label>').join('')||'<div class="note">هنوز یگانی نداری. از بخش ارتش یگان جذب کن.</div>';
@@ -672,7 +723,7 @@ $("spyLaunch")?.addEventListener("click",async()=>{const target=$("spyTarget").v
 
 function switchView(name){document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('active',x.dataset.view===name));document.querySelectorAll('.bottom-nav button').forEach(x=>x.classList.toggle('active',x.dataset.view===name));document.querySelectorAll('.view').forEach(x=>x.classList.toggle('active',x.id===name));if(window.radinwarGlobe){if(name==='map')window.radinwarGlobe.resumeAnimation?.();else window.radinwarGlobe.pauseAnimation?.()}if(name==='map'){loadGeo().then(()=>drawGlobe());}if(name==='army'||name==='economy')loadArmy();if(name==='commanders')loadCommanders();if(name==='war'||name==='diplomacy')loadDiplomacy();if(name==='market')loadNews();if(name==='announcements')loadAnnouncements();if(name==='groups'){loadGroups();loadGroupInvitations();}if(name==='private')loadPlayers();if(name==='commandcenter')loadCommandCenter();window.scrollTo({top:0,behavior:'smooth'})}document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>switchView(b.dataset.view));
 const originalLoadPlayers=loadPlayers;loadPlayers=async()=>{await originalLoadPlayers();fillMemberSelect()};
-const CLIENT_BUILD_VERSION='rw-20261112-22';let updateReloadStarted=false;
+const CLIENT_BUILD_VERSION='rw-20261112-23';let updateReloadStarted=false;
 async function checkServerVersion(){
  if(updateReloadStarted||!INIT_DATA)return;
  try{
