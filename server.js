@@ -899,7 +899,7 @@ app.use((err,req,res,next)=>{
 });
 
 const port=process.env.PORT||3000;
-initDb().then(async()=>{ await initWorldSystems(pool); app.listen(port,async()=>{
+initDb().then(async()=>{ await initWorldSystems(pool); const notice=await pool.query("INSERT INTO game_settings(setting_key,setting_value) VALUES($1,$2) ON CONFLICT(setting_key) DO NOTHING RETURNING setting_key",["game_update_notice_20261112_v2","sent"]); if(notice.rowCount) await publishWorldEvent("🚀 RADINWAR 3000.3 منتشر شد!\n🧬 فناوری‌های جدید، 🏙️ توسعه شهرها، 💱 بازار بازیکنان، 🛰️ اطلاعات راهبردی، 🌍 رویدادهای هفتگی و 🏆 فصل رقابت اضافه شدند.\n🔄 اگر بازی باز است، نسخه جدید به‌صورت خودکار بارگذاری می‌شود."); app.listen(port,async()=>{
   console.log("radinwar💥 online on "+port);
   await configureTelegramBot();
 });}).catch(e=>{console.error("Database initialization failed",e);process.exit(1)});
