@@ -69,7 +69,7 @@ button,.panel,.item,.stat,.post,.view-banner{transition:transform .16s ease,bord
 .battle-arena:after{content:"";position:absolute;left:50%;top:0;bottom:0;border-left:1px dashed #d9e8ff55}
 .battle-side{position:absolute;top:27px;width:38%;display:flex;flex-wrap:wrap;justify-content:center;gap:7px;transition:transform 1.6s cubic-bezier(.2,.8,.2,1)}
 .battle-side.attacker{left:3%;color:#83d7ff}.battle-side.defender{right:3%;color:#ff9c91}
-.battle-token{display:grid;place-items:center;width:32px;height:32px;border:1px solid currentColor;border-radius:10px;background:#10243ad9;box-shadow:0 0 16px currentColor;font-size:18px}
+.battle-token{display:grid;place-items:center;width:32px;height:32px;border:1px solid currentColor;border-radius:10px;background:#10243ad9;box-shadow:0 0 16px currentColor;font-size:18px}.battle-token i{font-style:normal}.battle-token small{font-size:8px;line-height:1;color:#f4f8ff;margin-top:1px}
 .battle-arena.clash .attacker{transform:translateX(42%)}.battle-arena.clash .defender{transform:translateX(-42%)}
 .battle-arena.clash .battle-token{animation:unitPulse .55s ease-in-out infinite alternate}
 @keyframes unitPulse{to{filter:brightness(1.7);transform:translateY(-4px)}}
@@ -298,9 +298,9 @@ header{height:66px;background:#071523eF;border-bottom:1px solid #6da3bc44;box-sh
 .battle-map svg:not(.map-layer-resources-off) .territory.gas-rich{stroke:#78d7d2;stroke-width:2}
 .battle-map svg:not(.map-layer-resources-off) .territory.lithium-rich{stroke:#b9a1ff;stroke-width:2;stroke-dasharray:3 2}
 .battle-flight-track{position:absolute;inset:0;z-index:4;pointer-events:none;overflow:hidden}.battle-aircraft{position:absolute;left:-14%;top:30px;font-size:25px;opacity:0;filter:drop-shadow(0 3px 5px #000a);transform:rotate(-8deg)}.battle-aircraft.second{top:57px;font-size:19px;animation-delay:.35s}
-.battle-arena.sortie .battle-aircraft{opacity:1;animation:aircraftPass 2.1s cubic-bezier(.2,.65,.25,1) both}
-.battle-arena.sortie .battle-aircraft.second{animation-name:aircraftPassSecond;animation-duration:2.35s}
-.battle-arena.clash .battle-aircraft{opacity:1;animation:aircraftLoop 1.2s ease-in-out infinite alternate}
+.battle-arena.has-aircraft.sortie .battle-aircraft{opacity:1;animation:aircraftPass 2.1s cubic-bezier(.2,.65,.25,1) both}
+.battle-arena.has-aircraft.sortie .battle-aircraft.second{animation-name:aircraftPassSecond;animation-duration:2.35s}
+.battle-arena.has-aircraft.clash .battle-aircraft{opacity:1;animation:aircraftLoop 1.2s ease-in-out infinite alternate}
 .battle-arena.aftermath .battle-aircraft{opacity:0;transition:opacity .5s}
 .battle-impact{position:absolute;z-index:3;left:50%;top:52%;width:9px;height:9px;border-radius:50%;background:#fff2b5;opacity:0;transform:translate(-50%,-50%);pointer-events:none}
 .battle-arena.clash .battle-impact{animation:impactPulse .65s ease-out infinite}
@@ -754,6 +754,7 @@ async function loadStraits(){
 $('sendAlliance')?.addEventListener('click',async()=>{const target_id=$('allianceTarget').value;if(!target_id)return toast('کشور مقصد را انتخاب کن');const d=await api('diplomacy',{action:'alliance',target_id});if(d.ok){toast('پیشنهاد اتحاد ارسال شد');loadDiplomacy()}});
 $('declareWar')?.addEventListener('click',async()=>{const target_id=$('warTarget').value;if(!target_id)return toast('کشور مقصد را انتخاب کن');if(!confirm('اعلان جنگ رسمی برای این کشور ثبت شود؟'))return;const d=await api('diplomacy',{action:'war',target_id});if(d.ok){toast('اعلان جنگ ثبت و ارسال شد');loadDiplomacy()}});
 
+let battleUnitCatalog={};
 async function loadBattleForce(){
  const info=$("battleCommanderInfo");if(info){
   const cd=await api("commanders"),active=cd.commanders?.find(x=>x.active);
@@ -761,6 +762,7 @@ async function loadBattleForce(){
   else info.textContent="🎖️ هنوز فرمانده فعالی نداری. از آکادمی یک فرمانده استخدام و فعال کن. هزینه پایه عملیات: هر ۱۰۰۰ یگان، ۱ نفت و ۱ انرژی.";
  }
  const box=$('battleForce');if(!box)return;const d=await api('army');if(!d.ok)return;
+ battleUnitCatalog=d.unitCatalog||{};
  const entries=Object.entries(d.unitCatalog||{}).filter(([k])=>Number(d.units?.[k]||0)>0);
  function updateBattleBriefing(catalog){
   const selected=Object.entries(catalog||{}).map(([key,unit])=>{const input=box.querySelector('[data-battle-force="'+CSS.escape(key)+'"]'),quantity=Math.max(0,Math.floor(Number(input?.value)||0));return {key,unit,quantity}}).filter(x=>x.quantity>0);
@@ -786,14 +788,17 @@ function showBattleCinematic(result,meta){
  const fmtBattle=n=>Number(n||0).toLocaleString('en-US');
  const sumValues=o=>Object.values(o||{}).reduce((n,v)=>n+Number(v||0),0);
  const deployed=sumValues(result.attackerLosses),defenderLosses=sumValues(result.defenderLosses);
+ const attackerComposition=result.attackerComposition||result.attackerLosses||{},defenderComposition=result.defenderComposition||result.defenderLosses||{};
+ const tokenMarkup=composition=>Object.entries(composition).filter(([,qty])=>Number(qty)>0).slice(0,8).map(([key,qty])=>{const unit=battleUnitCatalog[key]||{},icon=unit.icon||(/air|fighter|jet/i.test(key)?'✈️':/tank|armor/i.test(key)?'🚜':/ship|navy/i.test(key)?'🚢':'🛡️');return '<span class="battle-token" title="'+esc(unit.name||key)+' × '+fmtBattle(qty)+'"><i>'+esc(icon)+'</i><small>×'+fmtBattle(qty)+'</small></span>'}).join('')||'<span class="battle-token">⚙️</span>';
+ const hasAircraft=Object.entries(attackerComposition).some(([key,qty])=>Number(qty)>0&&((battleUnitCatalog[key]?.category||'').toLowerCase().includes('air')||/air|fighter|jet/i.test(key)));
  const won=String(result.summary||'').includes('پیروز شد');
  $('battleCinemaId').textContent='گزارش عملیات #'+String(result.id||'—');
  $('battleAttackPower').textContent=fmtBattle(ap);$('battleDefensePower').textContent=fmtBattle(dp);
  $('battleAttackFill').style.width=attackPct+'%';$('battleDefenseFill').style.width=defensePct+'%';
  $('battleResultBanner').className='battle-result-banner'+(won?'':' defeat');
  $('battleResultBanner').textContent=won?'🏆 پیروزی! منطقه به قلمرو تو اضافه شد':'🛡️ دفاع حریف موفق شد؛ منطقه حفظ شد';
- $('battleDetailList').innerHTML='<div><b>🚀 نیروی اعزامی</b>'+fmtBattle(deployed)+' یگان</div><div><b>🛡️ تلفات ثبت‌شده مدافع</b>'+fmtBattle(defenderLosses)+' یگان</div><div><b>🛢️ هزینه عملیات</b>'+fmtBattle(result.operationCost?.oil)+' نفت • '+fmtBattle(result.operationCost?.energy)+' انرژی</div><div><b>📍 مختصات منطقه</b>'+Number(meta?.lat||0).toFixed(3)+'°, '+Number(meta?.lng||0).toFixed(3)+'°</div><div><b>🎁 غنیمت</b>'+Object.entries(result.loot||{}).filter(([,v])=>Number(v)>0).map(([k,v])=>({coins:'🪙 پول',oil:'🛢️ نفت',steel:'🔩 فولاد',food:'🌾 غذا',energy:'⚡ انرژی'}[k]+' '+fmtBattle(v)).join('، ')||'بدون غنیمت')+'</div><div><b>🧠 فناوری و فرماندهی</b>ضرایب فناوری و فرمانده در نتیجه لحاظ شدند</div>';
- const arena=$('battleArena');arena.classList.remove('sortie','clash','aftermath');$('battleArenaLabel').textContent='فرماندهی در حال آماده‌سازی...';
+ $('battleDetailList').innerHTML='<div><b>🚀 نیروی اعزامی</b>'+fmtBattle(deployed)+' یگان</div><div><b>🛡️ تلفات ثبت‌شده مدافع</b>'+fmtBattle(defenderLosses)+' یگان</div><div><b>🛢️ هزینه عملیات</b>'+fmtBattle(result.operationCost?.oil)+' نفت • '+fmtBattle(result.operationCost?.energy)+' انرژی</div><div><b>📍 مختصات منطقه</b>'+Number(meta?.lat||0).toFixed(3)+'°, '+Number(meta?.lng||0).toFixed(3)+'°</div><div><b>🎁 غنیمت</b>'+Object.entries(result.loot||{}).filter(([,v])=>Number(v)>0).map(([k,v])=>({coins:'🪙 پول',oil:'🛢️ نفت',steel:'🔩 فولاد',food:'🌾 غذا',energy:'⚡ انرژی'}[k]+' '+fmtBattle(v)).join('، ')||'بدون غنیمت')+'</div><div><b>🧭 فاصلهٔ مسیر</b>'+fmtBattle(result.routeDistanceKm)+' کیلومتر • هزینهٔ عملیات با فاصله افزایش یافت</div><div><b>🌦️ آب‌وهوای منطقه</b>'+esc([result.weather?.season,result.weather?.climate,result.weather?.condition].filter(Boolean).join(' • ')||'نامشخص')+' • اثر محیطی در محاسبه لحاظ شد</div><div><b>🧠 فناوری و فرماندهی</b>ضرایب فناوری و فرمانده در نتیجه لحاظ شدند</div>';
+ const arena=$('battleArena');arena.classList.remove('sortie','clash','aftermath','has-aircraft');if(hasAircraft)arena.classList.add('has-aircraft');arena.querySelector('.battle-side.attacker').innerHTML=tokenMarkup(attackerComposition);arena.querySelector('.battle-side.defender').innerHTML=tokenMarkup(defenderComposition);$('battleArenaLabel').textContent='فرماندهی در حال آماده‌سازی...';
  const stages=[['🛰️ شناسایی و آماده‌سازی میدان',14],['✈️ برخاست و عبور نمایشی هواگردها',42],['⚡ درگیری شبیه‌سازی‌شده و تغییر موازنه',76],['🏁 تثبیت نتیجه و ثبت قلمرو',100]];
  let idx=0;const tick=()=>{const [label,pct]=stages[idx];$('battleStageText').textContent=label;$('battleStagePct').textContent=pct+'٪';$('battleArenaLabel').textContent=idx===0?'نیروها در حال آرایش هستند':idx===1?'هواگردها در صحنهٔ نبرد حرکت می‌کنند':idx===2?'نتیجهٔ محاسبه‌شده در حال نمایش است':'نتیجه نهایی در سرور ثبت شد';if(idx===1)arena.classList.add('sortie');if(idx===2){arena.classList.remove('sortie');arena.classList.add('clash')}if(idx===3){arena.classList.remove('clash');arena.classList.add('aftermath')}idx++;if(idx<stages.length)setTimeout(tick,idx===2?1200:850);else $('battleArenaLabel').textContent=won?'🏆 عملیات با پیروزی به پایان رسید':'🛡️ عملیات با مقاومت مدافع پایان یافت'};
  tick();
