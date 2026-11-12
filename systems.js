@@ -85,6 +85,7 @@ export function registerWorldSystems(app,{pool,auth,applyProduction}) {
   app.get("/api/command-center",auth,async(req,res)=>{
     const id=String(req.user.id);
     await applyProduction(id);
+    await pool.query("INSERT INTO player_cities(telegram_id,city_name,city_type) VALUES($1,$2,$3),($1,$4,$5),($1,$6,$7) ON CONFLICT(telegram_id,city_name) DO NOTHING",[id,"پایتخت","capital","شهر صنعتی","industrial","بندر ملی","port"]);
     const [tech,cities,spy,player]=await Promise.all([
       pool.query("SELECT tech_id,level FROM player_technologies WHERE telegram_id=$1",[id]),
       pool.query("SELECT id,city_name,city_type,level FROM player_cities WHERE telegram_id=$1 ORDER BY id",[id]),
