@@ -238,6 +238,8 @@ async function initDb() {
   if (!n.rows[0].n) await pool.query("INSERT INTO world_news(message) VALUES ($1),($2),($3)", ["شبکه جهانی radinwar💥 راه‌اندازی شد.", "بازار جهانی آماده معامله است.", "فرماندهان جدید می‌توانند کشور خود را انتخاب کنند."]);
   const updateNotice=await pool.query("INSERT INTO game_settings(setting_key,setting_value) VALUES('game_update_notice_20261112_v1','sent') ON CONFLICT(setting_key) DO NOTHING RETURNING setting_key");
   if(updateNotice.rowCount) await publishWorldEvent("📢 بازی آپدیت شد!\n\n💰 موجودی همه فرمانده‌ها روی ۱۰٬۰۰۰ پول تنظیم شد و درآمد پایه به ۳۰۰ پول در دقیقه تغییر کرد.\n🔄 اگر داخل بازی هستی، مینی‌اپ به‌صورت خودکار فقط یک‌بار ریلود می‌شود. اگر ریلود خودکار انجام نشد، یک‌بار صفحه را تازه کن.");
+  const commanderNotice=await pool.query("INSERT INTO game_settings(setting_key,setting_value) VALUES('commander_update_notice_20261112','sent') ON CONFLICT(setting_key) DO NOTHING RETURNING setting_key");
+  if(commanderNotice.rowCount) await publishWorldEvent("🎖️ سیستم فرماندهان نظامی اضافه شد! چهار تخصص تهاجمی، دفاعی، هوایی و لجستیک با استخدام، ارتقا، تجربه و اثر واقعی در نبرد فعال شدند.");
   const rewardNotice=await pool.query("INSERT INTO game_settings(setting_key,setting_value) VALUES('game_update_notice_20261112_v3','sent') ON CONFLICT(setting_key) DO NOTHING RETURNING setting_key");
   if(rewardNotice.rowCount) await publishWorldEvent("🎁 آپدیت جدید RADINWAR منتشر شد!\n\n🎁 جایزه روزانه به بازی اضافه شد.\n🔐 کدهای جایزه مخفی هم فعال شدند؛ کدها رو فقط از مدیرهای بازی دریافت کن.\n🛢️ تولید نفت، فولاد، غذا و انرژی ساختمان‌ها حالا دقیقه‌ای محاسبه میشه.\n🔄 مینی‌اپ یک‌بار برای دریافت نسخه جدید ریلود میشه.");
 }
