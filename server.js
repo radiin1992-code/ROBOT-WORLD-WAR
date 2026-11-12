@@ -16,7 +16,7 @@ app.use(express.static("public",{setHeaders(res,filePath){if(filePath.endsWith("
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.PGSSL === "true" ? { rejectUnauthorized: false } : undefined, max: 10, idleTimeoutMillis: 30000, connectionTimeoutMillis: 10000 });
 const OWNER_ID = "1852348620";
 const OWNER_IDS = new Set([OWNER_ID, "8881463089"]);
-const BUILD_VERSION = process.env.APP_RELEASE_VERSION || "rw-20261112-04";
+const BUILD_VERSION = "rw-20261112-06";
 const BOT_TOKEN = process.env.BOT_TOKEN || "";
 const PUBLIC_URL = process.env.RENDER_EXTERNAL_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? "https://" + process.env.RAILWAY_PUBLIC_DOMAIN : "");
 const MINI_APP_URL = process.env.MINI_APP_URL || PUBLIC_URL;
@@ -201,6 +201,8 @@ async function initDb() {
 
   const n = await pool.query("SELECT COUNT(*)::int AS n FROM world_news");
   if (!n.rows[0].n) await pool.query("INSERT INTO world_news(message) VALUES ($1),($2),($3)", ["شبکه جهانی radinwar💥 راه‌اندازی شد.", "بازار جهانی آماده معامله است.", "فرماندهان جدید می‌توانند کشور خود را انتخاب کنند."]);
+  const updateNotice=await pool.query("INSERT INTO game_settings(setting_key,setting_value) VALUES('game_update_notice_20261112_v1','sent') ON CONFLICT(setting_key) DO NOTHING RETURNING setting_key");
+  if(updateNotice.rowCount) await publishWorldEvent("📢 بازی آپدیت شد!\n\n💰 موجودی همه فرمانده‌ها روی ۱۰٬۰۰۰ پول تنظیم شد و درآمد پایه به ۳۰۰ پول در دقیقه تغییر کرد.\n🔄 اگر داخل بازی هستی، مینی‌اپ به‌صورت خودکار فقط یک‌بار ریلود می‌شود. اگر ریلود خودکار انجام نشد، یک‌بار صفحه را تازه کن.");
 }
 function safeEqual(a,b){const aa=Buffer.from(a),bb=Buffer.from(b);return aa.length===bb.length&&crypto.timingSafeEqual(aa,bb)}
 function verifyInitData(initData) {
