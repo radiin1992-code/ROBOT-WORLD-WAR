@@ -27,7 +27,7 @@ for (const method of ["get","post","put","patch","delete"]) {
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.PGSSL === "true" ? { rejectUnauthorized: false } : undefined, max: 10, idleTimeoutMillis: 30000, connectionTimeoutMillis: 10000 });
 const OWNER_ID = "1852348620";
 const OWNER_IDS = new Set([OWNER_ID, "8881463089"]);
-const BUILD_VERSION='rw-20261112-17';
+const BUILD_VERSION='rw-20261112-18';
 const BOT_TOKEN = process.env.BOT_TOKEN || "";
 const PUBLIC_URL = process.env.RENDER_EXTERNAL_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? "https://" + process.env.RAILWAY_PUBLIC_DOMAIN : "");
 const MINI_APP_URL = process.env.MINI_APP_URL || PUBLIC_URL;
@@ -500,8 +500,9 @@ async function applyProduction(id){
     const levels=Object.fromEntries(b.rows.map(x=>[x.building_type,Number(x.level)]));
     const seconds=Math.max(0,Math.min(86400,(Date.now()-new Date(p.rows[0].production_at).getTime())/1000));
     const hours=seconds/3600;
+    const coinIncomePerMinute=300+b.rows.reduce((sum,row)=>sum+Number(row.level||0)*Number(BUILDING_CATALOG[row.building_type]?.production?.coins||0),0);
     if(seconds>=1){
-      const base=countryEconomy(p.rows[0].country_code); let coins=seconds*5,initialEnergy=Number(p.rows[0].energy),initialOil=Number(p.rows[0].oil),initialSteel=Number(p.rows[0].steel),initialFood=Number(p.rows[0].food),energy=initialEnergy+hours*base.energy*60,oil=initialOil+hours*base.oil*60,steel=initialSteel+hours*base.steel*60,food=initialFood+hours*base.food*60;
+      const base=countryEconomy(p.rows[0].country_code); let coins=seconds*coinIncomePerMinute/60,initialEnergy=Number(p.rows[0].energy),initialOil=Number(p.rows[0].oil),initialSteel=Number(p.rows[0].steel),initialFood=Number(p.rows[0].food),energy=initialEnergy+hours*base.energy*60,oil=initialOil+hours*base.oil*60,steel=initialSteel+hours*base.steel*60,food=initialFood+hours*base.food*60;
       for(const [key,item] of Object.entries(BUILDING_CATALOG)){
         const production=item.production||{},level=levels[key]||0;
         if(!level)continue;
@@ -512,9 +513,8 @@ async function applyProduction(id){
         if(production.oil)oil+=hours*active*Number(production.oil);
         if(production.steel)steel+=hours*active*Number(production.steel);
         if(production.food)food+=hours*active*Number(production.food);
-        if(production.coins)coins+=hours*active*Number(production.coins);
       }
-      const [techRows,cityRows]=await Promise.all([client.query("SELECT tech_id,level FROM player_technologies WHERE telegram_id=$1",[String(id)]),client.query("SELECT COALESCE(SUM(level),0)::int AS total FROM player_cities WHERE telegram_id=$1",[String(id)])]); const tech=Object.fromEntries(techRows.rows.map(x=>[x.tech_id,Number(x.level)])); const cityBoost=1+Math.min(0.30,Number(cityRows.rows[0]?.total||0)*0.015); const event=getCurrentWorldEvent(); const industryBoost=cityBoost*(1+Number(tech.industry||0)*0.04+Number(tech.logistics||0)*0.02); const energyBoost=cityBoost*(1+Number(tech.energy||0)*0.05+Number(tech.logistics||0)*0.02)*(event.bonus==="energy"?1.25:1); const oilBoost=cityBoost*(1+Number(tech.logistics||0)*0.02); const steelBoost=cityBoost*(1+Number(tech.materials||0)*0.05+Number(tech.logistics||0)*0.02)*(event.bonus==="steel"?1.25:1); const foodBoost=cityBoost*(1+Number(tech.agriculture||0)*0.06+Number(tech.logistics||0)*0.02)*(event.bonus==="food"?1.25:1); const coinBoost=industryBoost*(event.bonus==="industry"?1.20:1); await client.query("UPDATE players SET coins=coins+$1::numeric,energy=energy+$2::numeric,oil=oil+$3::numeric,steel=steel+$4::numeric,food=food+$5::numeric,production_at=NOW() WHERE telegram_id=$6",[Math.floor(coins*coinBoost).toString(),Math.floor((Math.floor(energy)-Math.floor(initialEnergy))*energyBoost).toString(),Math.floor((Math.floor(oil)-Math.floor(initialOil))*oilBoost).toString(),Math.floor((Math.floor(steel)-Math.floor(initialSteel))*steelBoost).toString(),Math.floor((Math.floor(food)-Math.floor(initialFood))*foodBoost).toString(),String(id)]);
+      const [techRows,cityRows]=await Promise.all([client.query("SELECT tech_id,level FROM player_technologies WHERE telegram_id=$1",[String(id)]),client.query("SELECT COALESCE(SUM(level),0)::int AS total FROM player_cities WHERE telegram_id=$1",[String(id)])]); const tech=Object.fromEntries(techRows.rows.map(x=>[x.tech_id,Number(x.level)])); const cityBoost=1+Math.min(0.30,Number(cityRows.rows[0]?.total||0)*0.015); const event=getCurrentWorldEvent(); const industryBoost=cityBoost*(1+Number(tech.industry||0)*0.04+Number(tech.logistics||0)*0.02); const energyBoost=cityBoost*(1+Number(tech.energy||0)*0.05+Number(tech.logistics||0)*0.02)*(event.bonus==="energy"?1.25:1); const oilBoost=cityBoost*(1+Number(tech.logistics||0)*0.02); const steelBoost=cityBoost*(1+Number(tech.materials||0)*0.05+Number(tech.logistics||0)*0.02)*(event.bonus==="steel"?1.25:1); const foodBoost=cityBoost*(1+Number(tech.agriculture||0)*0.06+Number(tech.logistics||0)*0.02)*(event.bonus==="food"?1.25:1); const coinBoost=industryBoost*(event.bonus==="industry"?1.20:1); await client.query("UPDATE players SET coins=coins+$1::numeric,energy=energy+$2::numeric,oil=oil+$3::numeric,steel=steel+$4::numeric,food=food+$5::numeric,production_at=NOW() WHERE telegram_id=$6",[(coins*coinBoost).toFixed(6),Math.floor((Math.floor(energy)-Math.floor(initialEnergy))*energyBoost).toString(),Math.floor((Math.floor(oil)-Math.floor(initialOil))*oilBoost).toString(),Math.floor((Math.floor(steel)-Math.floor(initialSteel))*steelBoost).toString(),Math.floor((Math.floor(food)-Math.floor(initialFood))*foodBoost).toString(),String(id)]);
     }
     await client.query("COMMIT");
   }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
