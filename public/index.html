@@ -701,7 +701,7 @@ async function loadBattleForce(){
  }
  box.innerHTML=entries.map(([k,x])=>'<label class="panel" style="padding:9px;display:block"><b>'+esc(x.icon||'🧩')+' '+esc(x.name)+'</b><small style="display:block">موجودی: '+Number(d.units[k]).toLocaleString('en-US')+' • قدرت: '+Number(x.gameAttack||x.power||1)+'</small><input class="field" type="number" min="0" max="'+Number(d.units[k])+'" value="0" step="1" data-battle-force="'+esc(k)+'" style="margin-top:6px"></label>').join('')||'<div class="note">هنوز یگانی نداری. از بخش ارتش یگان جذب کن.</div>';
  box.querySelectorAll("[data-battle-force]").forEach(input=>input.addEventListener("input",()=>updateBattleBriefing(d.unitCatalog||{})));
- $("battleTarget")?.addEventListener("change",()=>updateBattleBriefing(d.unitCatalog||{}));
+ if($("battleTarget"))$("battleTarget").onchange=()=>updateBattleBriefing(d.unitCatalog||{});
  updateBattleBriefing(d.unitCatalog||{});
 }
 async function loadBattleReports(){
