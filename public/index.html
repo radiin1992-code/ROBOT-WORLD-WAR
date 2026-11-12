@@ -680,7 +680,7 @@ function renderBattleMap(playerRows=[],activeWars=[],allRelations=[],sectors=[])
   mapSvg.addEventListener('pointerup',finishMapPan);mapSvg.addEventListener('pointercancel',finishMapPan);
   mapSvg.addEventListener('wheel',e=>{e.preventDefault();const p=mapSvg.createSVGPoint();p.x=e.clientX;p.y=e.clientY;const q=p.matrixTransform(mapSvg.getScreenCTM().inverse());zoomBattleMap(e.deltaY<0 ? .82 : 1.22,q.x,q.y)},{passive:false});
   box.querySelectorAll('[data-battle-code]').forEach(path=>path.addEventListener('click',e=>{if(battleMapSuppressClick){battleMapSuppressClick=false;return;}
-  const p=byCode.get(path.dataset.battleCode);if(!p)return toast('این کشور هنوز فرمانده ندارد');
+  const code=path.dataset.battleCode;worldIntelSelected=code;renderWorldIntel();const p=byCode.get(code);if(!p){$('battleMapSelection').textContent='🌍 '+(worldIntelData?.countries?.find(x=>x.code===code)?.country_name||cname(features.find(f=>iso3(f)===code)))+' • اطلاعات منابع طبیعی در پنل اطلس نمایش داده شد.';return toast('اطلاعات منابع این کشور نمایش داده شد');}
   const id=String(p.telegram_id),isAtWar=activeWars.some(w=>(String(w.from_id)===String(me.telegram_id)&&String(w.to_id)===id)||(String(w.to_id)===String(me.telegram_id)&&String(w.from_id)===id));
   if(!isAtWar){$('warTarget').value=id;$('battleMapSelection').textContent='🏳️ '+(p.country_name||'کشور')+' انتخاب شد؛ ابتدا اعلام جنگ رسمی ثبت کن.';toast('کشور انتخاب شد؛ ابتدا اعلان جنگ رسمی ثبت کن');return}
   const svg=$('battleMapSvg'),pt=svg.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;const xy=pt.matrixTransform(svg.getScreenCTM().inverse());
@@ -716,8 +716,8 @@ async function loadWorldIntel(){
  worldIntelData=d;
  if(!worldIntelData.countries.some(c=>c.code===worldIntelSelected))worldIntelSelected=me?.country_code||"SAU";
  renderWorldIntel();
- $("worldIntelSearch")?.addEventListener("input",renderWorldIntel,{once:true});
- $("worldIntelFilter")?.addEventListener("change",renderWorldIntel,{once:true});
+ $("worldIntelSearch").oninput=renderWorldIntel;
+ $("worldIntelFilter").onchange=renderWorldIntel;
 }
 async function loadDiplomacy(){
   await loadStraits();
