@@ -17,6 +17,7 @@ const duplicates = [...new Set(ids.filter((id, index) => ids.indexOf(id) !== ind
 if (duplicates.length) throw new Error("Duplicate static HTML IDs: " + duplicates.join(", "));
 const css = html.match(/<style>([\s\S]*?)<\/style>/i)?.[1] || "";
 if ((css.match(/{/g) || []).length !== (css.match(/}/g) || []).length) throw new Error("CSS braces are unbalanced.");
+if (!html.includes("battleBriefing") || !html.includes("updateBattleBriefing") || !html.includes("battleBriefingComposition")) throw new Error("Live battle deployment briefing is missing.");
 if (!html.includes("battleCinematic") || !html.includes("showBattleCinematic") || !html.includes("battleResultBanner") || !html.includes("battleArena")) throw new Error("Cinematic battle result experience is missing.");
 if (!html.includes("battleMapZoomIn") || !html.includes("zoomBattleMap") || !html.includes("battleMapDragged")) throw new Error("Interactive battle map navigation is missing.");
 const runCheck = (file) => {
