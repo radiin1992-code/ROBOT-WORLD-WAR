@@ -36,6 +36,11 @@ if (!html.includes("dailyRewardBtn") || !html.includes("redeemCodeBtn") || !html
 
 if (!server.includes("tech.industry") || !server.includes("tech.agriculture") || !server.includes("tech.materials") || !server.includes("tech.energy")) throw new Error("Economic technologies are not applied to production.");
 if (!server.includes("const coinIncomePerSecond=300+Math.max(0,Number(p.rows[0].shop_income||0));") || !server.includes("let coins=seconds*coinIncomePerSecond") || !server.includes("production_at=production_at+($7::int * INTERVAL '1 second')")) throw new Error("Base income and purchased shop income must accrue for every elapsed second.");
+
+if (!server.includes('const IRAN_TIME_ZONE = "Asia/Tehran"') || !server.includes("return hour >= 12") || !server.includes("setInterval(()=>syncWarSchedule()") || !server.includes("war_schedule_state")) throw new Error("Iran-time automatic war schedule is missing.");
+if (!server.includes('if(!isWarOpenInIran())return res.status(403)') || !server.includes("اعلام جنگ از ساعت ۰۰:۰۰ تا ۱۲:۰۰")) throw new Error("War declaration and battle launch must be blocked during closed hours.");
+if (!server.includes("ساعت جنگ در ایران به ۱۲:۰۰ رسید") || !server.includes("ساعت ۰۰:۰۰ به وقت ایران رسید")) throw new Error("War open/close broadcast messages are missing.");
+
 if (!html.includes("درآمد هر ثانیه:") || !html.includes("shopBigIntValue(value)")) throw new Error("Per-second income label or decimal-safe balance display is missing.");
 const scripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map(match => match[1]).filter(code => code.trim());
 const temp = mkdtempSync(join(tmpdir(), "radinwar-check-"));
