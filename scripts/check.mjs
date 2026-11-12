@@ -39,6 +39,10 @@ if (!server.includes("const coinIncomePerSecond=300+Math.max(0,Number(p.rows[0].
 
 if (!server.includes('const IRAN_TIME_ZONE = "Asia/Tehran"') || !server.includes("return hour >= 12") || !server.includes("setInterval(()=>syncWarSchedule()") || !server.includes("war_schedule_state")) throw new Error("Iran-time automatic war schedule is missing.");
 if (!server.includes("CREATE TABLE IF NOT EXISTS territory_sectors") || !server.includes("target_sector TEXT")) throw new Error("Persistent territorial sector storage is missing.");
+if (!server.includes("CREATE TABLE IF NOT EXISTS strait_controls") || !server.includes("STRAIT_CATALOG") || !server.includes('/api/straits/toggle')) throw new Error("Persistent strait management is missing.");
+if (!server.includes("coinTradeMultiplier") || !server.includes("oilTradeMultiplier") || !server.includes("affectedStraits")) throw new Error("Closed straits must affect real economy production.");
+if (!html.includes('id="straitGrid"') || !html.includes("function loadStraits") || !html.includes("بستن کامل تنگه")) throw new Error("Strait management UI is missing.");
+
 if (!server.includes("sectorInput=req.body?.sector") || !server.includes("ON CONFLICT(sector_key) DO UPDATE SET owner_id=EXCLUDED.owner_id")) throw new Error("Battle sector validation or capture persistence is missing.");
 if (!server.includes("territoryBoost=1+Math.min(0.20") || !server.includes("coins=Math.floor(coins*territoryBoost)") || !server.includes("territoryBoost*(1+Number(tech.industry")) throw new Error("Captured territory production bonus is missing.");
 if (!server.includes("منطقهٔ انتخابی را تصرف کرد") || !server.includes("منطقه حفظ شد")) throw new Error("Territorial battle result messages are missing.");
