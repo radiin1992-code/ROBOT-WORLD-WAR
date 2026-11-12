@@ -746,22 +746,23 @@ app.get("/api/shop",auth,async(req,res)=>{
 });
 app.post("/api/shop/buy",auth,async(req,res)=>{
   const catalog={oil:{price:180000,amount:100,column:"oil",incomeBonus:3000},steel:{price:140000,amount:100,column:"steel",incomeBonus:2500},food:{price:90000,amount:250,column:"food",incomeBonus:2000},energy:{price:160000,amount:100,column:"energy",incomeBonus:3000},industry:{price:1200000,amount:1,column:"industry",incomeBonus:200000},agriculture:{price:850000,amount:1,column:"agriculture",incomeBonus:120000},technology:{price:1800000,amount:1,column:"technology",incomeBonus:250000}};
-  const item=catalog[req.body?.item];
-  const rawQuantity=req.body?.quantity??1;
-  const quantityText=String(rawQuantity).replace(/[۰-۹]/g,d=>String("۰۱۲۳۴۵۶۷۸۹".indexOf(d))).replace(/[٠-٩]/g,d=>String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).replace(/[٬,\s]/g,"");
-  const quantity=Number(quantityText);
+  const item=catalog[req.body?.item],rawQuantity=String(req.body?.quantity??"1");
+  const quantityText=rawQuantity.replace(/[۰-۹]/g,d=>String("۰۱۲۳۴۵۶۷۸۹".indexOf(d))).replace(/[٠-٩]/g,d=>String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).replace(/[٬,\s]/g,"");
   if(!item)return res.status(400).json({ok:false,error:"کالای نامعتبر."});
-  if(!Number.isSafeInteger(quantity)||quantity<1||quantity>1000000)return res.status(400).json({ok:false,error:"تعداد خرید معتبر نیست. عددی بین ۱ تا ۱٬۰۰۰٬۰۰۰ وارد کن."});
-  const totalPrice=item.price*quantity,totalAmount=item.amount*quantity,totalIncome=item.incomeBonus*quantity;
-  if(!Number.isSafeInteger(totalPrice)||!Number.isSafeInteger(totalAmount)||!Number.isSafeInteger(totalIncome))return res.status(400).json({ok:false,error:"تعداد خرید بیش از حد مجاز است."});
-  const q=await pool.query(`UPDATE players SET coins=coins-$1,${item.column}=${item.column}+$2,shop_income=shop_income+$3,updated_at=NOW() WHERE telegram_id=$4 AND country_code IS NOT NULL AND coins >= $1 RETURNING coins`,[totalPrice,totalAmount,totalIncome,String(req.user.id)]);
+  if(!/^\d+$/.test(quantityText))return res.status(400).json({ok:false,error:"تعداد خرید معتبر نیست."});
+  let quantity;try{quantity=BigInt(quantityText)}catch{return res.status(400).json({ok:false,error:"تعداد خرید معتبر نیست."})}
+  const BIGINT_MAX=9223372036854775807n,price=BigInt(item.price),amount=BigInt(item.amount),income=BigInt(item.incomeBonus);
+  if(quantity<1n||quantity>BIGINT_MAX/price||quantity>BIGINT_MAX/amount||quantity>BIGINT_MAX/income)
+    return res.status(400).json({ok:false,error:"تعداد از ظرفیت ذخیره‌سازی بازی بیشتر است."});
+  const totalPrice=(price*quantity).toString(),totalAmount=(amount*quantity).toString(),totalIncome=(income*quantity).toString();
+  const q=await pool.query(\`UPDATE players SET coins=coins-$1::bigint,\${item.column}=\${item.column}+$2::bigint,shop_income=shop_income+$3::bigint,updated_at=NOW() WHERE telegram_id=$4 AND country_code IS NOT NULL AND coins >= $1::bigint RETURNING coins\`,[totalPrice,totalAmount,totalIncome,String(req.user.id)]);
   if(!q.rowCount){
     const state=await pool.query("SELECT coins,country_code FROM players WHERE telegram_id=$1",[String(req.user.id)]);
     if(!state.rowCount||!state.rows[0].country_code)return res.status(400).json({ok:false,error:"اول باید کشور انتخاب کنی."});
     return res.status(400).json({ok:false,error:"پول کافی نداری."});
   }
-  await pool.query("INSERT INTO transactions(telegram_id,kind,resource,amount) VALUES($1,'purchase',$2,$3)",[String(req.user.id),item.column,totalAmount]);
-  res.set("Cache-Control","no-store").json({ok:true,coins:q.rows[0].coins,quantity,totalPrice,totalAmount,totalIncome});
+  await pool.query("INSERT INTO transactions(telegram_id,kind,resource,amount) VALUES($1,'purchase',$2,$3::bigint)",[String(req.user.id),item.column,totalAmount]);
+  res.set("Cache-Control","no-store").json({ok:true,coins:String(q.rows[0].coins),quantity:quantity.toString(),totalPrice,totalAmount,totalIncome});
 });
 app.post("/telegram/webhook",async(req,res)=>{
   if(WEBHOOK_SECRET && req.get("x-telegram-bot-api-secret-token")!==WEBHOOK_SECRET) return res.sendStatus(403);
