@@ -157,6 +157,46 @@ input,textarea,select{accent-color:#58e8e5}
 @media(max-width:600px){body{background-attachment:scroll}.view.active{animation:worldEnter .28s ease-out both}.item .icon{animation-duration:6s}.panel,.item,.stat,.post,.country,.playerrow,.grouprow{box-shadow:0 8px 20px #0007,inset 0 1px #fff2}.bottom-nav{backdrop-filter:blur(12px)}}
 @media(prefers-reduced-motion:reduce){.view.active,.item .icon{animation:none!important}html{scroll-behavior:auto}}
 
+
+/* RADINWAR 3000.2: distinct visual identity and depth across every game module */
+.view{--section-accent:var(--aqua);--section-glow:#45f3ed22}
+#overview{--section-accent:#59e8f2;--section-glow:#45e5f222}
+#market{--section-accent:#ffd36e;--section-glow:#ffd36e20}
+#map{--section-accent:#79e8a8;--section-glow:#79e8a820}
+#economy{--section-accent:#ffbd70;--section-glow:#ffbd7022}
+#army{--section-accent:#80aaff;--section-glow:#80aaff22}
+#war{--section-accent:#ff829c;--section-glow:#ff829c20}
+#diplomacy{--section-accent:#b89aff;--section-glow:#b89aff22}
+#announcements{--section-accent:#ff9bd4;--section-glow:#ff9bd420}
+#groups,#private{--section-accent:#75e9d0;--section-glow:#75e9d022}
+.view.active{background:radial-gradient(ellipse at 92% 2%,var(--section-glow),transparent 38%)}
+.view.active .eyebrow{color:var(--section-accent);text-shadow:0 0 16px var(--section-glow)}
+.view.active .panel,.view.active .game-card,.view.active .post,.view.active .news-item{border-color:color-mix(in srgb,var(--section-accent) 38%,#243b59)}
+.view.active .panel h3,.view.active .game-card h3{ text-shadow:0 0 18px var(--section-glow)}
+.view.active .btn.primary{background:linear-gradient(120deg,color-mix(in srgb,var(--section-accent) 78%,#263b70),#24345d 62%,#382b65);border-color:color-mix(in srgb,var(--section-accent) 72%,white);box-shadow:0 5px 0 #101b35,0 10px 24px var(--section-glow),inset 0 1px #ffffff55}
+.panel,.game-card,.item,.post,.stat,.resource-chip,.news-item,.playerrow,.grouprow,.country,.action-card,.battle-map-card{transform-style:preserve-3d;backface-visibility:hidden}
+.panel,.game-card,.item,.post,.news-item,.playerrow,.grouprow,.country{box-shadow:0 15px 30px #0007,inset 0 1px #ffffff18,inset 0 -12px 24px #02071355}
+.btn,.tabs button,.unit-category-tabs button,.bottom-nav button,.map-zoom button{transition:transform .2s cubic-bezier(.2,.8,.2,1),filter .2s,box-shadow .2s}
+.btn:active,.tabs button:active,.unit-category-tabs button:active,.bottom-nav button:active,.map-zoom button:active{transform:translateY(2px) scale(.975);filter:brightness(1.2)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid #9df7ff;outline-offset:3px}
+header{background:linear-gradient(100deg,#071321f5,#142344f2 48%,#201637f2);box-shadow:0 8px 30px #0007,inset 0 -1px #8beaff2b}
+.logo{text-shadow:0 0 18px #62eaff55}
+.orb{animation:orbFloat 5s ease-in-out infinite;box-shadow:0 0 22px #61dfff33,inset 0 1px #fff5}
+#countryScreen{background:radial-gradient(ellipse at 12% 8%,#0c839055,transparent 34%),radial-gradient(ellipse at 90% 88%,#8548bd44,transparent 36%),linear-gradient(145deg,#050914,#0c1830 55%,#17102a)}
+#countryScreen .panel{border-color:#7bdffb88;box-shadow:0 25px 60px #000b,0 0 38px #4bcfff20,inset 0 1px #ffffff22}
+#countryList .country{transition:transform .22s,border-color .22s,filter .22s}
+#countryList .country:active{transform:scale(.985)}
+#resourceGrid .resource-chip:nth-child(4n+1){--resource-accent:#5be8f0}
+#resourceGrid .resource-chip:nth-child(4n+2){--resource-accent:#b18cff}
+#resourceGrid .resource-chip:nth-child(4n+3){--resource-accent:#8ee7a9}
+#resourceGrid .resource-chip:nth-child(4n){--resource-accent:#ffd36e}
+#resourceGrid .resource-chip{border-color:color-mix(in srgb,var(--resource-accent) 54%,transparent);box-shadow:0 10px 22px #0006,0 0 17px color-mix(in srgb,var(--resource-accent) 12%,transparent),inset 0 1px #fff2}
+#armyUnits .item,#economyBuildings .item,#shopGrid .item{position:relative;isolation:isolate}
+#armyUnits .item:before,#economyBuildings .item:before,#shopGrid .item:before{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(120deg,transparent 20%,#ffffff0d 42%,transparent 62%);transform:translateX(-130%);animation:radarSweep 8s ease-in-out infinite;pointer-events:none;z-index:-1}
+@keyframes radarSweep{0%,72%,100%{transform:translateX(-130%)}84%{transform:translateX(130%)}}
+@media(max-width:600px){.view.active{background:radial-gradient(ellipse at 90% 0%,var(--section-glow),transparent 30%)}.panel,.game-card,.item,.post,.news-item,.playerrow,.grouprow,.country{box-shadow:0 9px 19px #0007,inset 0 1px #ffffff14}.orb{animation-duration:8s}#armyUnits .item:before,#economyBuildings .item:before,#shopGrid .item:before{animation-duration:12s}}
+@media(prefers-reduced-motion:reduce){.orb,#armyUnits .item:before,#economyBuildings .item:before,#shopGrid .item:before{animation:none!important}.btn,.tabs button,.unit-category-tabs button,.bottom-nav button,.map-zoom button{transition:none!important}}
+
 </style></head><body><div id='bootScreen'><div class='boot-card'><div class='boot-mark'>💥</div><div class='boot-title'>radinwar</div><div class='boot-copy'>در حال اتصال به جهان بازی…</div><div class='boot-spinner'></div></div></div>
 <header id="appHeader"><div class="logo">🌐 <i>radinwar💥</i></div><div class="user"><span id="userName">فرمانده</span><div class="orb">♛</div></div></header>
 <main>
@@ -513,7 +553,7 @@ $('ownerResourceBtn')?.addEventListener('click',async()=>{const targetId=$('owne
 
 function switchView(name){document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('active',x.dataset.view===name));document.querySelectorAll('.bottom-nav button').forEach(x=>x.classList.toggle('active',x.dataset.view===name));document.querySelectorAll('.view').forEach(x=>x.classList.toggle('active',x.id===name));if(window.radinwarGlobe){if(name==='map')window.radinwarGlobe.resumeAnimation?.();else window.radinwarGlobe.pauseAnimation?.()}if(name==='map'){loadGeo().then(()=>drawGlobe());}if(name==='army'||name==='economy')loadArmy();if(name==='war'||name==='diplomacy')loadDiplomacy();if(name==='market')loadNews();if(name==='announcements')loadAnnouncements();if(name==='groups'){loadGroups();loadGroupInvitations();}if(name==='private')loadPlayers();window.scrollTo({top:0,behavior:'smooth'})}document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>switchView(b.dataset.view));
 const originalLoadPlayers=loadPlayers;loadPlayers=async()=>{await originalLoadPlayers();fillMemberSelect()};
-const CLIENT_BUILD_VERSION='rw-20261112-12';let updateReloadStarted=false;
+const CLIENT_BUILD_VERSION='rw-20261112-13';let updateReloadStarted=false;
 async function checkServerVersion(){
  if(updateReloadStarted||!INIT_DATA)return;
  try{
