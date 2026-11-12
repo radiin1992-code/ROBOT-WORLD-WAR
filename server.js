@@ -252,9 +252,9 @@ app.post("/api/upgrade",auth,async(req,res)=>{
 async function ownerOnly(req,res,next){if(!OWNER_IDS.has(String(req.user.id)))return res.status(403).json({ok:false,error:"دسترسی غیرمجاز"});next()}
 app.post("/api/owner/unit-catalog",auth,ownerOnly,async(req,res)=>{
   const name=String(req.body?.name||"").trim().slice(0,60),category=String(req.body?.category||"ground"),categoryNames={ground:"نیروی زمینی",air:"یگان هوایی",naval:"ناوگان دریایی",support:"پشتیبانی"};
-  const imageUrl=String(req.body?.imageUrl||"").trim(),icon=String(req.body?.icon||"🧩").slice(0,12),quantity=Number(req.body?.quantity??1),power=Number(req.body?.power??10);
+  const imageUrl=String(req.body?.imageUrl||"").trim(),validImage=/^https:\/\//i.test(imageUrl)||/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(imageUrl),icon=String(req.body?.icon||"🧩").slice(0,12),quantity=Number(req.body?.quantity??1),power=Number(req.body?.power??10);
   const cost={coins:Number(req.body?.coins),steel:Number(req.body?.steel),food:Number(req.body?.food),energy:Number(req.body?.energy),oil:Number(req.body?.oil)};
-  if(name.length<2||!categoryNames[category]||!/^https:\/\//i.test(imageUrl)||imageUrl.length>2048||!Number.isSafeInteger(quantity)||quantity<1||quantity>1000000||!Number.isSafeInteger(power)||power<1||power>1000000||Object.values(cost).some(v=>!Number.isSafeInteger(v)||v<0||v>100000000000))return res.status(400).json({ok:false,error:"اطلاعات مدل یا قیمت معتبر نیست."});
+  if(name.length<2||!categoryNames[category]||!validImage||imageUrl.length>6000000||!Number.isSafeInteger(quantity)||quantity<1||quantity>1000000||!Number.isSafeInteger(power)||power<1||power>1000000||Object.values(cost).some(v=>!Number.isSafeInteger(v)||v<0||v>100000000000))return res.status(400).json({ok:false,error:"اطلاعات مدل یا قیمت معتبر نیست."});
   const key="custom_"+crypto.randomBytes(8).toString("hex");
   await pool.query("INSERT INTO custom_unit_catalog(unit_type,name,category,category_name,icon,image_url,quantity,coins,steel,food,energy,oil,power,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)",[key,name,category,categoryNames[category],icon,imageUrl,quantity,cost.coins,cost.steel,cost.food,cost.energy,cost.oil,power,String(req.user.id)]);
   res.json({ok:true,type:key});
@@ -428,7 +428,7 @@ app.get("/api/army",auth,async(req,res)=>{
   res.json({ok:true,resources:p.rows[0],units,buildings,unitCatalog:catalog,buildingCatalog:BUILDING_CATALOG});
 });
 app.post("/api/army/recruit",auth,async(req,res)=>{
-  const type=String(req.body?.type||""),item=UNIT_CATALOG[type];if(!item)return res.status(400).json({ok:false,error:"نوع یگان معتبر نیست."});
+  const type=String(req.body?.type||"");let item=UNIT_CATALOG[type];if(!item){const custom=await pool.query("SELECT name,icon,category,category_name,quantity,coins,steel,food,energy,oil,power FROM custom_unit_catalog WHERE unit_type=$1",[type]);if(custom.rowCount){const x=custom.rows[0];item={name:x.name,icon:x.icon,category:x.category,categoryName:x.category_name,quantity:Number(x.quantity),power:Number(x.power),cost:{coins:Number(x.coins),steel:Number(x.steel),food:Number(x.food),energy:Number(x.energy),oil:Number(x.oil)}}}}if(!item)return res.status(400).json({ok:false,error:"نوع یگان معتبر نیست."});
   const batches=Number(req.body?.quantity??1);if(!Number.isSafeInteger(batches)||batches<1||batches>1000000)return res.status(400).json({ok:false,error:"تعداد معتبر نیست."});
   const c=item.cost,totals={coins:c.coins*batches,steel:c.steel*batches,food:c.food*batches,energy:c.energy*batches,oil:c.oil*batches},added=Number(item.quantity)*batches;
   if(!Number.isSafeInteger(added)||Object.values(totals).some(v=>!Number.isSafeInteger(v)))return res.status(400).json({ok:false,error:"تعداد انتخابی بیش از حد مجاز است."});
