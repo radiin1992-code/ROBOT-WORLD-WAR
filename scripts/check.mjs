@@ -27,6 +27,14 @@ if (!server.includes("registerWorldSystems") || !server.includes("initWorldSyste
 if (!systems.includes("/api/player-market") || !systems.includes("/api/research") || !systems.includes("/api/espionage/launch") || !systems.includes("/api/season")) throw new Error("A major world system route is missing.");
 for (const tech of ["industry","energy","agriculture","materials","intelligence","logistics","military","aviation","defense"]) if (!systems.includes(`id:"${tech}"`)) throw new Error("Technology missing: " + tech);
 if (!server.includes("attackerTech.military") || !server.includes("attackerTech.aviation") || !server.includes("defenderTech.defense")) throw new Error("Combat technologies are not applied to battle calculations.");
+const catalogBlock = server.match(/const BUILDING_CATALOG = \{([\\s\\S]*?)\\n\};/)?.[1] || "";
+const ratesBlock = server.match(/const BUILDING_RESOURCE_OUTPUTS = (\{[\\s\\S]*?\});\\nfor/)?.[1];
+if (!catalogBlock || !ratesBlock) throw new Error("Building production catalog is missing.");
+const buildingKeys = [...catalogBlock.matchAll(/^\\s{2}([a-zA-Z0-9_]+):\\{/gm)].map(x => x[1]);
+const resourceRates = JSON.parse(ratesBlock);
+if (buildingKeys.length !== 45 || buildingKeys.some(key => !resourceRates[key])) throw new Error("Every economy building must have a resource yield.");
+if (!server.includes("if(production.energy)energy+=hours*level*Number(production.energy)") || !server.includes("if(production.oil)oil+=hours*active*Number(production.oil)")) throw new Error("Hourly building resource production is not applied.");
+
 if (!server.includes("tech.industry") || !server.includes("tech.agriculture") || !server.includes("tech.materials") || !server.includes("tech.energy")) throw new Error("Economic technologies are not applied to production.");
 const scripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map(match => match[1]).filter(code => code.trim());
 const temp = mkdtempSync(join(tmpdir(), "radinwar-check-"));
