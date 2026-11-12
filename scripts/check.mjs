@@ -7,6 +7,7 @@ const root = process.cwd();
 const server = readFileSync(join(root, "server.js"), "utf8");
 const html = readFileSync(join(root, "public/index.html"), "utf8");
 const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+const systems = readFileSync(join(root, "systems.js"), "utf8");
 const version = server.match(/BUILD_VERSION\s*=\s*['"]([^'"]+)['"]/);
 if (!version || !html.includes(version[1])) throw new Error("Client/server build versions do not match.");
 if (!server.includes('app.get("/health"') || !server.includes('const asyncRoute =')) throw new Error("Required health or async error handling is missing.");
@@ -21,6 +22,9 @@ const runCheck = (file) => {
   if (result.status !== 0) throw new Error(result.stderr || result.stdout || "Syntax check failed: " + file);
 };
 runCheck(join(root, "server.js"));
+runCheck(join(root, "systems.js"));
+if (!server.includes("registerWorldSystems") || !server.includes("initWorldSystems")) throw new Error("World systems are not registered and initialized.");
+if (!systems.includes("/api/player-market") || !systems.includes("/api/research") || !systems.includes("/api/espionage/launch") || !systems.includes("/api/season")) throw new Error("A major world system route is missing.");
 const scripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map(match => match[1]).filter(code => code.trim());
 const temp = mkdtempSync(join(tmpdir(), "radinwar-check-"));
 try {
@@ -33,4 +37,4 @@ try {
   rmSync(temp, { recursive: true, force: true });
 }
 if (!pkg.scripts?.start || !pkg.scripts?.test) throw new Error("Required npm scripts are missing.");
-console.log("RADINWAR checks passed: server, inline scripts, HTML IDs, CSS structure, build version.");
+console.log("RADINWAR checks passed: server, systems module, inline scripts, HTML IDs, CSS structure, build version.");
