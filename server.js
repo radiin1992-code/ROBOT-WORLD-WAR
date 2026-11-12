@@ -1,6 +1,7 @@
 import express from "express";
 import pg from "pg";
 import crypto from "node:crypto";
+import { initWorldSystems, registerWorldSystems, getCurrentWorldEvent } from "./systems.js";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const worldTopology = require("world-atlas/countries-110m.json");
@@ -26,7 +27,7 @@ for (const method of ["get","post","put","patch","delete"]) {
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.PGSSL === "true" ? { rejectUnauthorized: false } : undefined, max: 10, idleTimeoutMillis: 30000, connectionTimeoutMillis: 10000 });
 const OWNER_ID = "1852348620";
 const OWNER_IDS = new Set([OWNER_ID, "8881463089"]);
-const BUILD_VERSION='rw-20261112-13';
+const BUILD_VERSION='rw-20261112-14';
 const BOT_TOKEN = process.env.BOT_TOKEN || "";
 const PUBLIC_URL = process.env.RENDER_EXTERNAL_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? "https://" + process.env.RAILWAY_PUBLIC_DOMAIN : "");
 const MINI_APP_URL = process.env.MINI_APP_URL || PUBLIC_URL;
@@ -477,11 +478,12 @@ async function applyProduction(id){
         if(production.food)food+=hours*active*production.food;
         if(production.coins)coins+=hours*active*production.coins;
       }
-      await client.query("UPDATE players SET coins=coins+$1::numeric,energy=energy+$2::numeric,oil=oil+$3::numeric,steel=steel+$4::numeric,food=food+$5::numeric,production_at=NOW() WHERE telegram_id=$6",[Math.floor(coins).toString(),(Math.floor(energy)-Math.floor(initialEnergy)).toString(),(Math.floor(oil)-Math.floor(initialOil)).toString(),(Math.floor(steel)-Math.floor(initialSteel)).toString(),(Math.floor(food)-Math.floor(initialFood)).toString(),String(id)]);
+      const [techRows,cityRows]=await Promise.all([client.query("SELECT tech_id,level FROM player_technologies WHERE telegram_id=$1",[String(id)]),client.query("SELECT COALESCE(SUM(level),0)::int AS total FROM player_cities WHERE telegram_id=$1",[String(id)])]); const tech=Object.fromEntries(techRows.rows.map(x=>[x.tech_id,Number(x.level)])); const cityBoost=1+Math.min(0.30,Number(cityRows.rows[0]?.total||0)*0.015); const event=getCurrentWorldEvent(); const industryBoost=cityBoost*(1+Number(tech.industry||0)*0.04+Number(tech.logistics||0)*0.02); const energyBoost=cityBoost*(1+Number(tech.energy||0)*0.05+Number(tech.logistics||0)*0.02)*(event.bonus==="energy"?1.25:1); const oilBoost=cityBoost*(1+Number(tech.logistics||0)*0.02); const steelBoost=cityBoost*(1+Number(tech.materials||0)*0.05+Number(tech.logistics||0)*0.02)*(event.bonus==="steel"?1.25:1); const foodBoost=cityBoost*(1+Number(tech.agriculture||0)*0.06+Number(tech.logistics||0)*0.02)*(event.bonus==="food"?1.25:1); const coinBoost=industryBoost*(event.bonus==="industry"?1.20:1); await client.query("UPDATE players SET coins=coins+$1::numeric,energy=energy+$2::numeric,oil=oil+$3::numeric,steel=steel+$4::numeric,food=food+$5::numeric,production_at=NOW() WHERE telegram_id=$6",[Math.floor(coins*coinBoost).toString(),Math.floor((Math.floor(energy)-Math.floor(initialEnergy))*energyBoost).toString(),Math.floor((Math.floor(oil)-Math.floor(initialOil))*oilBoost).toString(),Math.floor((Math.floor(steel)-Math.floor(initialSteel))*steelBoost).toString(),Math.floor((Math.floor(food)-Math.floor(initialFood))*foodBoost).toString(),String(id)]);
     }
     await client.query("COMMIT");
   }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
 }
+registerWorldSystems(app,{pool,auth,applyProduction});
 app.get("/api/army",auth,async(req,res)=>{
   await applyProduction(req.user.id);
   const [p,u,b,custom,images]=await Promise.all([
@@ -896,7 +898,7 @@ app.use((err,req,res,next)=>{
 });
 
 const port=process.env.PORT||3000;
-initDb().then(()=>app.listen(port,async()=>{
+initDb().then(async()=>{ await initWorldSystems(pool); app.listen(port,async()=>{
   console.log("radinwar💥 online on "+port);
   await configureTelegramBot();
-})).catch(e=>{console.error("Database initialization failed",e);process.exit(1)});
+});}).catch(e=>{console.error("Database initialization failed",e);process.exit(1)});
