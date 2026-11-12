@@ -646,8 +646,9 @@ $('launchBattle')?.addEventListener('click',async()=>{
  const target_id=$('battleTarget')?.value;if(!target_id)return toast('کشور دارای جنگ فعال را انتخاب کن');
  const forces={};document.querySelectorAll('[data-battle-force]').forEach(el=>{const n=Math.floor(Number(el.value)||0);if(n>0)forces[el.dataset.battleForce]=n});
  if(!Object.keys(forces).length)return toast('حداقل یک یگان انتخاب کن');
- if(!confirm('نبرد اجرا شود؟ نتیجه و تلفات یگان‌ها ثبت می‌شود.'))return;
- const btn=$('launchBattle');btn.disabled=true;if(!selectedBattleSector||selectedBattleSector.targetId!==target_id)return toast('ابتدا روی نقشه، یک منطقه از کشور هدف انتخاب کن');const z=await api('battles/launch',{target_id,forces,sector:{lat:selectedBattleSector.lat,lng:selectedBattleSector.lng}});btn.disabled=false;
+ if(!selectedBattleSector||selectedBattleSector.targetId!==target_id)return toast('ابتدا روی نقشه، یک منطقه از کشور هدف انتخاب کن');
+ if(!confirm('نبرد برای منطقه انتخاب‌شده اجرا شود؟ نتیجه، مالکیت منطقه و تلفات یگان‌ها ثبت می‌شود.'))return;
+ const btn=$('launchBattle');btn.disabled=true;const z=await api('battles/launch',{target_id,forces,sector:{lat:selectedBattleSector.lat,lng:selectedBattleSector.lng}});btn.disabled=false;
  if(z.ok){selectedBattleSector=null;toast(z.summary);await loadProfile();await loadArmy();await loadDiplomacy();await loadBattleReports()}else toast(z.error||'نبرد اجرا نشد');
 });
 async function loadNews(){const d=await api("news");if(!d.ok)return;const el=$("marketNews");el.innerHTML=d.items.map(n=>'<article class="news-item" data-news="'+n.id+'"><span class="news-icon">📡</span><div><b>'+esc(n.message)+'</b><small>رویداد داخل بازی • گزارش شماره '+n.id+(n.created_at?' • '+new Date(n.created_at).toLocaleString('fa-IR'):'')+'</small></div><span class="open-report">نمایش ←</span></article>').join("")||'<div class="note">هنوز رویدادی ثبت نشده است.</div>';el.querySelectorAll("[data-news]").forEach(x=>x.onclick=()=>{x.classList.toggle("expanded");x.scrollIntoView({behavior:"smooth",block:"center"})})}
