@@ -20,7 +20,7 @@ if ((css.match(/{/g) || []).length !== (css.match(/}/g) || []).length) throw new
 if (!html.includes("battleBriefing") || !html.includes("updateBattleBriefing") || !html.includes("battleBriefingComposition")) throw new Error("Live battle deployment briefing is missing.");
 if (!html.includes("battleCinematic") || !html.includes("showBattleCinematic") || !html.includes("battleResultBanner") || !html.includes("battleArena")) throw new Error("Cinematic battle result experience is missing.");
 if (!html.includes("battleMapZoomIn") || !html.includes("zoomBattleMap") || !html.includes("battleMapDragged")) throw new Error("Interactive battle map navigation is missing.");
-if (!server.includes("countries-10m.json") || !html.includes("WORLD ATLAS") || !html.includes("data-map-layer") || !html.includes("landFree")) throw new Error("Detailed atlas overhaul or map layer controls are missing.");
+if (!server.includes("countries-10m.json") || !html.includes("WORLD ATLAS") || !html.includes("data-map-layer") || !html.includes("landFree")) throw new Error("Detailed atlas overhaul or map layer controls are missing.");\nif (!pkg.dependencies?.["globe.gl"] || !server.includes("/vendor/globe.gl.min.js") || !html.includes(".bumpImageUrl(\"/api/map-heightmap\")") || !html.includes(".showGraticules(true)") || !html.includes("polygonAltitude(f=>f===hoveredCountry?.009:.0028)")) throw new Error("Locally served 3D globe, terrain relief, or interactive country elevation is missing.");
 const runCheck = (file) => {
   const result = spawnSync(process.execPath, ["--check", file], { encoding: "utf8" });
   if (result.status !== 0) throw new Error(result.stderr || result.stdout || "Syntax check failed: " + file);
