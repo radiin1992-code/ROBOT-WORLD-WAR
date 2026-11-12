@@ -38,6 +38,14 @@ if (!server.includes("tech.industry") || !server.includes("tech.agriculture") ||
 if (!server.includes("const coinIncomePerSecond=300+Math.max(0,Number(p.rows[0].shop_income||0));") || !server.includes("let coins=seconds*coinIncomePerSecond") || !server.includes("production_at=production_at+($7::int * INTERVAL '1 second')")) throw new Error("Base income and purchased shop income must accrue for every elapsed second.");
 
 if (!server.includes('const IRAN_TIME_ZONE = "Asia/Tehran"') || !server.includes("return hour >= 12") || !server.includes("setInterval(()=>syncWarSchedule()") || !server.includes("war_schedule_state")) throw new Error("Iran-time automatic war schedule is missing.");
+if (!server.includes("CREATE TABLE IF NOT EXISTS territory_sectors") || !server.includes("target_sector TEXT")) throw new Error("Persistent territorial sector storage is missing.");
+if (!server.includes("sectorInput=req.body?.sector") || !server.includes("ON CONFLICT(sector_key) DO UPDATE SET owner_id=EXCLUDED.owner_id")) throw new Error("Battle sector validation or capture persistence is missing.");
+if (!server.includes("territoryBoost=1+Math.min(0.20") || !server.includes("territoryBoost*(1+Number(tech.industry")) throw new Error("Captured territory production bonus is missing.");
+if (!server.includes("منطقهٔ انتخابی را تصرف کرد") || !server.includes("منطقه حفظ شد")) throw new Error("Territorial battle result messages are missing.");
+if (!html.includes("function pointInMapFeature") || !html.includes("selectedBattleSector") || !html.includes("sector:{lat:selectedBattleSector.lat,lng:selectedBattleSector.lng}") || !html.includes("clip-path=\\"url(#clip-")) throw new Error("Clickable map-region selection or ownership overlay is missing.");
+
+
+if (!server.includes('const IRAN_TIME_ZONE = "Asia/Tehran"') || !server.includes("return hour >= 12") || !server.includes("setInterval(()=>syncWarSchedule()") || !server.includes("war_schedule_state")) throw new Error("Iran-time automatic war schedule is missing.");
 if (!server.includes('if(!isWarOpenInIran())return res.status(403)') || !server.includes("اعلام جنگ از ساعت ۰۰:۰۰ تا ۱۲:۰۰")) throw new Error("War declaration and battle launch must be blocked during closed hours.");
 if (!server.includes("ساعت جنگ در ایران به ۱۲:۰۰ رسید") || !server.includes("ساعت ۰۰:۰۰ به وقت ایران رسید")) throw new Error("War open/close broadcast messages are missing.");
 
