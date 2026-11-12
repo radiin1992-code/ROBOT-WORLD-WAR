@@ -598,7 +598,7 @@ app.post("/telegram/webhook",async(req,res)=>{
     await telegramApi("sendMessage",{chat_id:chat,text,reply_markup:{inline_keyboard:[[{text:"🚀 ورود به بازی",web_app:{url:MINI_APP_URL}}]]}});
   } else if(txt.startsWith("/help")){
     await telegramApi("sendMessage",{chat_id:chat,text:"📘 راهنمای radinwar💥\n/start یا /game: ورود به بازی\nکشور: انتخاب دائمی یک کشور آزاد\nاقتصاد: خرید منابع و توسعه زیرساخت\nارتباطات: چت خصوصی و گروه‌ها\nبیانیه‌ها: انتشار پیام و تصویر\nبازار جهانی: رویدادهای داخل بازی\n/help: نمایش همین راهنما\n\nقوانین: احترام، عدم اسپم، عدم جعل خبر واقعی و رعایت انتخاب دائمی کشور.",reply_markup:{inline_keyboard:[[{text:"🌍 باز کردن Mini App",web_app:{url:MINI_APP_URL}}]]}});
-  } else if(txt && !txt.startsWith("/") && String(from?.id)!==OWNER_ID){
+  } else if(txt && !txt.startsWith("/") && String(m.from?.id)!==OWNER_ID){
     await telegramApi("sendMessage",{chat_id:OWNER_ID,text:"📩 پیام تازه به ربات از "+(from?.first_name||"کاربر")+" (@"+(from?.username||"بدون نام کاربری")+"):\n\n"+txt,reply_markup:{inline_keyboard:[[{text:"🌍 باز کردن بازی",web_app:{url:APP_LINK("market")}}]]}});
     await telegramApi("sendMessage",{chat_id:chat,text:"پیامت به مرکز فرماندهی رسید. 📡"});
   } else if(txt.startsWith("/about")){
