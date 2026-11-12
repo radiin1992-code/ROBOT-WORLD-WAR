@@ -27,12 +27,12 @@ for (const method of ["get","post","put","patch","delete"]) {
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.PGSSL === "true" ? { rejectUnauthorized: false } : undefined, max: 10, idleTimeoutMillis: 30000, connectionTimeoutMillis: 10000 });
 const OWNER_ID = "1852348620";
 const OWNER_IDS = new Set([OWNER_ID, "8881463089"]);
-const BUILD_VERSION='rw-20261112-22';
+const BUILD_VERSION='rw-20261112-23';
 const COMMANDER_CATALOG = [
  {key:"assault",name:"ژنرال آذرخش",role:"فرمانده تهاجمی",description:"رهبری تهاجمی و افزایش قدرت کل نیروی اعزامی",effect:"قدرت حمله +۱۵٪ در سطح ۱، به‌علاوه ۲٪ در هر سطح",base:15,perLevel:2,cost:{coins:120000,oil:250,steel:180,energy:120},image:"https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=720&q=85",icon:"⚔️"},
  {key:"defense",name:"ژنرال سپر آهنین",role:"فرمانده دفاعی",description:"استحکام خطوط دفاعی و افزایش قدرت دفاع کشور",effect:"قدرت دفاع +۲۰٪ در سطح ۱، به‌علاوه ۲٪ در هر سطح",base:20,perLevel:2,cost:{coins:100000,oil:150,steel:300,energy:150},image:"https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=720&q=85",icon:"🛡️"},
  {key:"air",name:"ژنرال آسمان",role:"فرمانده هوایی",description:"هماهنگی بهتر نیروی هوایی و افزایش قدرت یگان‌های هوایی",effect:"قدرت هوایی +۱۵٪ در سطح ۱، به‌علاوه ۲٪ در هر سطح",base:15,perLevel:2,cost:{coins:150000,oil:350,steel:220,energy:200},image:"https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=720&q=85",icon:"✈️"},
- {key:"logistics",name:"ژنرال تدارکات",role:"فرمانده لجستیک",description:"مدیریت بهتر سوخت و انرژی عملیات و کاهش هزینه اعزام نیرو",effect:"کاهش هزینه نفت و انرژی عملیات تا ۱۸٪ با ارتقای سطح",base:10,perLevel:1,cost:{coins:90000,oil:180,steel:180,energy:120},image:"https://images.unsplash.com/photo-1507591064344-4c6ce005b128?auto=format&fit=crop&w=720&q=85",icon:"📦"}
+ {key:"logistics",name:"ژنرال تدارکات",role:"فرمانده لجستیک",description:"مدیریت بهتر سوخت و انرژی عملیات و کاهش هزینه اعزام نیرو",effect:"کاهش هزینه نفت و انرژی عملیات تا ۱۹٪ با ارتقای سطح",base:10,perLevel:1,cost:{coins:90000,oil:180,steel:180,energy:120},image:"https://images.unsplash.com/photo-1507591064344-4c6ce005b128?auto=format&fit=crop&w=720&q=85",icon:"📦"}
 ];
 const BOT_TOKEN = process.env.BOT_TOKEN || "";
 const PUBLIC_URL = process.env.RENDER_EXTERNAL_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? "https://" + process.env.RAILWAY_PUBLIC_DOMAIN : "");
@@ -552,44 +552,90 @@ app.get("/api/army",auth,async(req,res)=>{
 });
 app.get("/api/commanders",auth,async(req,res)=>{
  const id=String(req.user.id);
- const [owned,player]=await Promise.all([pool.query("SELECT id,commander_key,level,xp,hired_at FROM player_commanders WHERE telegram_id=$1 ORDER BY hired_at,id",[id]),pool.query("SELECT active_commander_id FROM players WHERE telegram_id=$1",[id])]);
+ const [owned,player]=await Promise.all([
+  pool.query("SELECT id,commander_key,level,xp,hired_at FROM player_commanders WHERE telegram_id=$1 ORDER BY hired_at,id",[id]),
+  pool.query("SELECT active_commander_id FROM players WHERE telegram_id=$1",[id])
+ ]);
  const byKey=new Map(owned.rows.map(x=>[x.commander_key,x]));
  const activeId=player.rows[0]?.active_commander_id==null?null:String(player.rows[0].active_commander_id);
- const commanders=COMMANDER_CATALOG.map(c=>{const o=byKey.get(c.key);return {...c,owned:!!o,id:o?String(o.id):null,level:o?Number(o.level):0,xp:o?Number(o.xp):0,active:!!o&&String(o.id)===activeId,nextXp:o?Number(o.level)*100:100}});
- res.json({ok:true,commanders,activeId,ownedCount:owned.rows.length,maxSlots:3});
+ const commanders=COMMANDER_CATALOG.map(c=>{
+  const o=byKey.get(c.key),level=o?Number(o.level):0,xp=o?Number(o.xp):0;
+  const bonus=o?Math.min(c.base+c.perLevel*(level-1),c.base+c.perLevel*9):c.base;
+  return {...c,owned:!!o,id:o?String(o.id):null,level,xp,active:!!o&&String(o.id)===activeId,nextXp:o?level*100:100,bonusPercent:bonus,nextBonusPercent:Math.min(c.base+c.perLevel*level,c.base+c.perLevel*9)};
+ });
+ res.set("Cache-Control","no-store").json({ok:true,commanders,activeId,ownedCount:owned.rows.length,maxSlots:3,availableSlots:Math.max(0,3-owned.rows.length)});
 });
 app.post("/api/commanders/hire",auth,async(req,res)=>{
  const key=String(req.body?.key||""),def=COMMANDER_CATALOG.find(x=>x.key===key);
  if(!def)return res.status(400).json({ok:false,error:"فرمانده معتبر نیست."});
  const id=String(req.user.id),client=await pool.connect();
  try{
-  await client.query("BEGIN");await client.query("SELECT telegram_id FROM players WHERE telegram_id=$1 FOR UPDATE",[id]);
+  await client.query("BEGIN");
+  const player=await client.query("SELECT telegram_id,active_commander_id,country_code FROM players WHERE telegram_id=$1 FOR UPDATE",[id]);
+  if(!player.rowCount){await client.query("ROLLBACK");return res.status(404).json({ok:false,error:"حساب بازیکن پیدا نشد."})}
+  if(!player.rows[0].country_code){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"اول کشور خودت را انتخاب کن."})}
   const existing=await client.query("SELECT id FROM player_commanders WHERE telegram_id=$1 AND commander_key=$2",[id,key]);
   if(existing.rowCount){await client.query("ROLLBACK");return res.status(409).json({ok:false,error:"این فرمانده را قبلاً استخدام کرده‌ای."})}
   const count=await client.query("SELECT COUNT(*)::int AS n FROM player_commanders WHERE telegram_id=$1",[id]);
-  if(Number(count.rows[0].n)>=3){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"ظرفیت استخدام پر شده است؛ حداکثر ۳ فرمانده می‌توانی داشته باشی."})}
+  if(Number(count.rows[0].n)>=3){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"ظرفیت استخدام پر شده است؛ ابتدا یکی از فرمانده‌ها را آزاد کن."})}
   const c=def.cost,paid=await client.query("UPDATE players SET coins=coins-$1,oil=oil-$2,steel=steel-$3,energy=energy-$4 WHERE telegram_id=$5 AND coins>=$1 AND oil>=$2 AND steel>=$3 AND energy>=$4 RETURNING telegram_id",[c.coins,c.oil,c.steel,c.energy,id]);
   if(!paid.rowCount){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"برای استخدام این فرمانده پول، نفت، فولاد یا انرژی کافی نداری."})}
   const hired=await client.query("INSERT INTO player_commanders(telegram_id,commander_key) VALUES($1,$2) RETURNING id",[id,key]);
-  await client.query("COMMIT");res.json({ok:true,id:String(hired.rows[0].id)});
+  const hiredId=String(hired.rows[0].id);
+  await client.query("UPDATE players SET active_commander_id=COALESCE(active_commander_id,$1) WHERE telegram_id=$2",[hiredId,id]);
+  await client.query("COMMIT");
+  res.json({ok:true,id:hiredId,autoActivated:player.rows[0].active_commander_id==null});
  }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
 });
 app.post("/api/commanders/active",auth,async(req,res)=>{
  const id=String(req.user.id),commanderId=req.body?.commander_id==null||req.body?.commander_id===""?null:String(req.body.commander_id);
  if(commanderId!==null&&!/^\d+$/.test(commanderId))return res.status(400).json({ok:false,error:"شناسه فرمانده معتبر نیست."});
- if(commanderId!==null){const owned=await pool.query("SELECT id FROM player_commanders WHERE id=$1 AND telegram_id=$2",[commanderId,id]);if(!owned.rowCount)return res.status(404).json({ok:false,error:"این فرمانده متعلق به تو نیست."})}
- await pool.query("UPDATE players SET active_commander_id=$1 WHERE telegram_id=$2",[commanderId,id]);res.json({ok:true,activeId:commanderId});
+ const client=await pool.connect();
+ try{
+  await client.query("BEGIN");
+  const player=await client.query("SELECT telegram_id FROM players WHERE telegram_id=$1 FOR UPDATE",[id]);
+  if(!player.rowCount){await client.query("ROLLBACK");return res.status(404).json({ok:false,error:"حساب بازیکن پیدا نشد."})}
+  if(commanderId!==null){
+   const owned=await client.query("SELECT id FROM player_commanders WHERE id=$1 AND telegram_id=$2",[commanderId,id]);
+   if(!owned.rowCount){await client.query("ROLLBACK");return res.status(404).json({ok:false,error:"این فرمانده متعلق به تو نیست."})}
+  }
+  await client.query("UPDATE players SET active_commander_id=$1 WHERE telegram_id=$2",[commanderId,id]);
+  await client.query("COMMIT");res.json({ok:true,activeId:commanderId});
+ }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
 });
 app.post("/api/commanders/upgrade",auth,async(req,res)=>{
  const commanderId=String(req.body?.commander_id||"");if(!/^\d+$/.test(commanderId))return res.status(400).json({ok:false,error:"فرمانده معتبر نیست."});
  const id=String(req.user.id),client=await pool.connect();
  try{
-  await client.query("BEGIN");const q=await client.query("SELECT id,level FROM player_commanders WHERE id=$1 AND telegram_id=$2 FOR UPDATE",[commanderId,id]);
+  await client.query("BEGIN");
+  const player=await client.query("SELECT telegram_id FROM players WHERE telegram_id=$1 FOR UPDATE",[id]);
+  if(!player.rowCount){await client.query("ROLLBACK");return res.status(404).json({ok:false,error:"حساب بازیکن پیدا نشد."})}
+  const q=await client.query("SELECT id,level FROM player_commanders WHERE id=$1 AND telegram_id=$2 FOR UPDATE",[commanderId,id]);
   if(!q.rowCount){await client.query("ROLLBACK");return res.status(404).json({ok:false,error:"فرمانده پیدا نشد."})}
   const level=Number(q.rows[0].level);if(level>=10){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"فرمانده به حداکثر سطح رسیده است."})}
-  const cost={coins:20000*level,steel:30*level,energy:20*level},paid=await client.query("UPDATE players SET coins=coins-$1,steel=steel-$2,energy=energy-$3 WHERE telegram_id=$4 AND coins>=$1 AND steel>=$2 AND energy>=$3 RETURNING telegram_id",[cost.coins,cost.steel,cost.energy,id]);
+  const cost={coins:20000*level,steel:30*level,energy:20*level};
+  const paid=await client.query("UPDATE players SET coins=coins-$1,steel=steel-$2,energy=energy-$3 WHERE telegram_id=$4 AND coins>=$1 AND steel>=$2 AND energy>=$3 RETURNING telegram_id",[cost.coins,cost.steel,cost.energy,id]);
   if(!paid.rowCount){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"برای ارتقای فرمانده پول، فولاد یا انرژی کافی نداری."})}
-  await client.query("UPDATE player_commanders SET level=level+1 WHERE id=$1",[commanderId]);await client.query("COMMIT");res.json({ok:true,level:level+1,cost});
+  await client.query("UPDATE player_commanders SET level=level+1,xp=0 WHERE id=$1",[commanderId]);
+  await client.query("COMMIT");res.json({ok:true,level:level+1,cost});
+ }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
+});
+app.post("/api/commanders/dismiss",auth,async(req,res)=>{
+ const commanderId=String(req.body?.commander_id||"");if(!/^\d+$/.test(commanderId))return res.status(400).json({ok:false,error:"فرمانده معتبر نیست."});
+ const id=String(req.user.id),client=await pool.connect();
+ try{
+  await client.query("BEGIN");
+  await client.query("SELECT telegram_id FROM players WHERE telegram_id=$1 FOR UPDATE",[id]);
+  const q=await client.query("SELECT id,commander_key FROM player_commanders WHERE id=$1 AND telegram_id=$2 FOR UPDATE",[commanderId,id]);
+  if(!q.rowCount){await client.query("ROLLBACK");return res.status(404).json({ok:false,error:"فرمانده پیدا نشد."})}
+  const def=COMMANDER_CATALOG.find(x=>x.key===q.rows[0].commander_key);
+  if(!def){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"اطلاعات این فرمانده پیدا نشد."})}
+  const c=def.cost,refund={coins:Math.floor(c.coins*.25),oil:Math.floor(c.oil*.25),steel:Math.floor(c.steel*.25),energy:Math.floor(c.energy*.25)};
+  const replacement=await client.query("SELECT id FROM player_commanders WHERE telegram_id=$1 AND id<>$2 ORDER BY hired_at,id LIMIT 1",[id,commanderId]);
+  const nextId=replacement.rowCount?String(replacement.rows[0].id):null;
+  await client.query("UPDATE players SET coins=coins+$1,oil=oil+$2,steel=steel+$3,energy=energy+$4,active_commander_id=CASE WHEN active_commander_id=$5 THEN $6 ELSE active_commander_id END WHERE telegram_id=$7",[refund.coins,refund.oil,refund.steel,refund.energy,commanderId,nextId,id]);
+  await client.query("DELETE FROM player_commanders WHERE id=$1 AND telegram_id=$2",[commanderId,id]);
+  await client.query("COMMIT");res.json({ok:true,refund,activeId:nextId});
  }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
 });
 app.post("/api/army/recruit",auth,async(req,res)=>{
@@ -690,7 +736,7 @@ app.post("/api/battles/launch",auth,async(req,res)=>{
   const arBase=Math.min(.38,Math.max(.04,(dp/total)*(win ? .30 : .58))),drBase=Math.min(.48,Math.max(.05,(ap/total)*(win ? .62 : .34)));
   const ar=Math.max(.02,arBase*(1-attackerLogistics)),dr=Math.max(.02,drBase*(1-defenderLogistics));
   const totalCommitted=used.reduce((sum,[,qty])=>sum+Number(qty),0),baseOperationCost=Math.ceil(totalCommitted/1000);
-  const operationOilCost=Math.max(0,Math.floor(baseOperationCost*(1-attackerLogistics))),operationEnergyCost=Math.max(0,Math.floor(baseOperationCost*(1-attackerLogistics)));
+  const operationOilCost=Math.max(1,Math.ceil(baseOperationCost*(1-attackerLogistics))),operationEnergyCost=Math.max(0,Math.floor(baseOperationCost*(1-attackerLogistics)));
   if(operationOilCost||operationEnergyCost){const paidOperation=await client.query("UPDATE players SET oil=oil-$1,energy=energy-$2 WHERE telegram_id=$3 AND oil>=$1 AND energy>=$2 RETURNING telegram_id",[operationOilCost,operationEnergyCost,attacker]);if(!paidOperation.rowCount){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"برای عملیات، نفت و انرژی کافی نداری. هر ۱۰۰۰ یگان اعزامی ۱ نفت و ۱ انرژی نیاز دارد؛ فرمانده لجستیک هزینه را کاهش می‌دهد."})}}
   const al={},dl={};
   const loot={coins:"0",oil:"0",steel:"0",food:"0",energy:"0"};
@@ -720,8 +766,8 @@ app.post("/api/battles/launch",auth,async(req,res)=>{
   if(defenderCommander?.key==="defense")commanderText.push("افزایش دفاع مدافع +"+Math.round(defenderDefenseBonus*100)+"٪");
   if(attackerCommander?.key==="logistics")commanderText.push("تخفیف هزینه عملیات مهاجم "+Math.round(attackerLogistics*100)+"٪");
   if(defenderCommander?.key==="logistics")commanderText.push("کاهش تلفات مدافع "+Math.round(defenderLogistics*100)+"٪");
-  if(attackerCommander?.id)await client.query("UPDATE player_commanders SET level=CASE WHEN level<10 AND xp+25>=level*100 THEN level+1 ELSE level END,xp=CASE WHEN level<10 AND xp+25>=level*100 THEN xp+25-level*100 ELSE xp+25 END WHERE id=$1",[attackerCommander.id]);
-  if(defenderCommander?.id){const xp=winner===target?40:25;await client.query("UPDATE player_commanders SET level=CASE WHEN level<10 AND xp+$1>=level*100 THEN level+1 ELSE level END,xp=CASE WHEN level<10 AND xp+$1>=level*100 THEN xp+$1-level*100 ELSE xp+$1 END WHERE id=$2",[xp,defenderCommander.id])}
+  if(attackerCommander?.id)await client.query("UPDATE player_commanders SET level=CASE WHEN level<10 AND xp+25>=level*100 THEN level+1 ELSE level END,xp=CASE WHEN level>=10 THEN 0 WHEN xp+25>=level*100 THEN xp+25-level*100 ELSE xp+25 END WHERE id=$1",[attackerCommander.id]);
+  if(defenderCommander?.id){const xp=winner===target?40:25;await client.query("UPDATE player_commanders SET level=CASE WHEN level<10 AND xp+$1>=level*100 THEN level+1 ELSE level END,xp=CASE WHEN level>=10 THEN 0 WHEN xp+$1>=level*100 THEN xp+$1-level*100 ELSE xp+$1 END WHERE id=$2",[xp,defenderCommander.id])}
   const summary=(win?("🏆 "+names.get(attacker)+" در نبرد با "+names.get(target)+" پیروز شد."):("🛡️ "+names.get(target)+" حمله "+names.get(attacker)+" را دفع کرد."))+lootText+(techText.length?" 🧬 اثر فناوری: "+techText.join(" • "):"")+(commanderText.length?" 🎖️ فرماندهان: "+commanderText.join(" • "):"");
   const report=await client.query("INSERT INTO battle_reports(attacker_id,defender_id,diplomacy_id,winner_id,attacker_power,defender_power,attacker_losses,defender_losses,loot,summary) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10) RETURNING id",[attacker,target,war.rows[0].id,winner,ap,dp,JSON.stringify(al),JSON.stringify(dl),JSON.stringify(loot),summary]);
   await client.query("UPDATE players SET wins=wins+1 WHERE telegram_id=$1",[winner]);
