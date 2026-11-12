@@ -27,7 +27,7 @@ for (const method of ["get","post","put","patch","delete"]) {
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.PGSSL === "true" ? { rejectUnauthorized: false } : undefined, max: 10, idleTimeoutMillis: 30000, connectionTimeoutMillis: 10000 });
 const OWNER_ID = "1852348620";
 const OWNER_IDS = new Set([OWNER_ID, "8881463089"]);
-const BUILD_VERSION='rw-20261112-v3-01';
+const BUILD_VERSION='rw-20261112-worldsim-01';
 const COMMANDER_CATALOG = [
  {key:"assault",name:"ژنرال آذرخش",role:"فرمانده تهاجمی",description:"رهبری تهاجمی و افزایش قدرت کل نیروی اعزامی",effect:"قدرت حمله +۱۵٪ در سطح ۱، به‌علاوه ۲٪ در هر سطح",base:15,perLevel:2,cost:{coins:120000,oil:250,steel:180,energy:120},image:"https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=720&q=85",icon:"⚔️"},
  {key:"defense",name:"ژنرال سپر آهنین",role:"فرمانده دفاعی",description:"استحکام خطوط دفاعی و افزایش قدرت دفاع کشور",effect:"قدرت دفاع +۲۰٪ در سطح ۱، به‌علاوه ۲٪ در هر سطح",base:20,perLevel:2,cost:{coins:100000,oil:150,steel:300,energy:150},image:"https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=720&q=85",icon:"🛡️"},
@@ -321,6 +321,33 @@ app.get("/api/treasury",auth,async(req,res)=>{await applyProduction(req.user.id)
 app.get("/api/news",auth,async(_req,res)=>{const q=await pool.query("SELECT id,message,created_at FROM world_news ORDER BY id DESC LIMIT 60");res.json({ok:true,items:q.rows});});
 function pointInGeoRing(ring,lng,lat){let inside=false;for(let i=0,j=ring.length-1;i<ring.length;j=i++){const xi=ring[i][0],yi=ring[i][1],xj=ring[j][0],yj=ring[j][1];if(((yi>lat)!==(yj>lat))&&(lng<(xj-xi)*(lat-yi)/(yj-yi+1e-12)+xi))inside=!inside;}return inside}
 function pointInCountry(code,lng,lat){const f=localWorldGeoJSON.features.find(x=>x.properties?.ISO_A3===code);if(!f?.geometry)return false;const g=f.geometry,polys=g.type==="Polygon"?[g.coordinates]:g.type==="MultiPolygon"?g.coordinates:[];return polys.some(poly=>pointInGeoRing(poly[0],lng,lat)&&!poly.slice(1).some(r=>pointInGeoRing(r,lng,lat)))}
+function countryAnchor(code){
+ const f=localWorldGeoJSON.features.find(x=>x.properties?.ISO_A3===code);if(!f?.geometry)return null;
+ const g=f.geometry,polys=g.type==="Polygon"?[g.coordinates]:g.type==="MultiPolygon"?g.coordinates:[];
+ let sx=0,sy=0,n=0;
+ for(const poly of polys){const ring=poly[0]||[];const step=Math.max(1,Math.floor(ring.length/180));for(let i=0;i<ring.length;i+=step){const p=ring[i];if(Number.isFinite(p?.[0])&&Number.isFinite(p?.[1])){sx+=p[0];sy+=p[1];n++}}}
+ return n?{lng:sx/n,lat:sy/n}:null;
+}
+function countryDistanceKm(a,b){
+ const x=countryAnchor(a),y=countryAnchor(b);if(!x||!y)return 0;
+ const rad=v=>v*Math.PI/180,R=6371,dLat=rad(y.lat-x.lat),dLng=rad(y.lng-x.lng);
+ const h=Math.sin(dLat/2)**2+Math.cos(rad(x.lat))*Math.cos(rad(y.lat))*Math.sin(dLng/2)**2;
+ return Math.round(2*R*Math.asin(Math.sqrt(Math.min(1,h))));
+}
+function seasonalSectorWeather(lat,lng,now=new Date()){
+ const month=now.getUTCMonth()+1,day=Math.floor(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate())/86400000);
+ const south=lat<0,seasonMonth=south?((month+5)%12)+1:month;
+ const season=seasonMonth<=2?"زمستان":seasonMonth<=5?"بهار":seasonMonth<=8?"تابستان":"پاییز";
+ const abs=Math.abs(lat),climate=abs<23.5?"گرمسیری":abs<35?"نیمه‌گرمسیری":abs<60?"معتدل":"سردسیر";
+ const seed=Math.abs(Math.sin(lat*12.9898+lng*78.233+day*0.017)*43758.5453)%1;
+ let condition="صاف",airFactor=1,groundFactor=1,defenseFactor=1;
+ if(climate==="سردسیر"&&season==="زمستان"&&seed>.28){condition="برفی";airFactor=.92;groundFactor=.94;defenseFactor=1.02}
+ else if(climate==="گرمسیری"&&seed>.52){condition="بارانی";airFactor=.94;groundFactor=.97;defenseFactor=1.01}
+ else if(seed>.86){condition="طوفانی";airFactor=.86;groundFactor=.95;defenseFactor=1.02}
+ else if(seed>.64){condition="بارانی";airFactor=.95;groundFactor=.97}
+ return {season,climate,condition,airFactor,groundFactor,defenseFactor,model:"آب‌وهوای فصلی شبیه‌سازی‌شده، نه دادهٔ هواشناسی زنده"};
+}
+
 const mapGeoCache=localWorldGeoJSON;
 app.get("/api/map-data",(_req,res)=>res.set("Cache-Control","public, max-age=86400").json(mapGeoCache));
 app.get("/api/map-texture",async(_req,res)=>{try{if(mapTextureCache)return res.type("image/jpeg").set("Cache-Control","public,max-age=604800").send(mapTextureCache);for(const url of ["https://cdn.jsdelivr.net/npm/three-globe@2.45.0/example/img/earth-blue-marble.jpg","https://unpkg.com/three-globe@2.45.0/example/img/earth-blue-marble.jpg"]){try{const r=await fetch(url,{signal:AbortSignal.timeout(12000)});if(!r.ok)continue;const b=Buffer.from(await r.arrayBuffer());if(b.length<10000)continue;mapTextureCache=b;return res.type("image/jpeg").set("Cache-Control","public,max-age=604800").send(b)}catch{}}res.status(503).end()}catch{res.status(503).end()}});
@@ -536,7 +563,71 @@ const COUNTRY_ECONOMY = {
  POL:{income:5,energy:26,oil:8,steel:17,food:20}, SWE:{income:5,energy:43,oil:5,steel:16,food:17},
  ARE:{income:5,energy:46,oil:32,steel:7,food:7}, NZL:{income:5,energy:39,oil:5,steel:8,food:27}
 };
-function countryEconomy(code){return COUNTRY_ECONOMY[code]||{income:5,energy:18,oil:5,steel:7,food:12};}
+const WORLD_RESOURCE_PROFILES = {
+ USA:{oil:5,gas:5,coal:5,iron:4,copper:4,lithium:2,uranium:3,rareEarth:3,agriculture:5,hydro:4,renewables:4,gdp:5},
+ CAN:{oil:4,gas:5,coal:3,iron:4,copper:4,lithium:4,uranium:5,rareEarth:3,agriculture:4,hydro:5,renewables:5,gdp:4},
+ MEX:{oil:4,gas:3,coal:2,iron:3,copper:4,lithium:1,uranium:1,rareEarth:1,agriculture:4,hydro:2,renewables:3,gdp:3},
+ BRA:{oil:2,gas:2,coal:1,iron:5,copper:3,lithium:2,uranium:2,rareEarth:3,agriculture:5,hydro:5,renewables:5,gdp:3},
+ VEN:{oil:5,gas:4,coal:1,iron:3,copper:2,lithium:0,uranium:0,rareEarth:0,agriculture:3,hydro:3,renewables:2,gdp:2},
+ GUY:{oil:4,gas:2,coal:0,iron:1,copper:0,lithium:0,uranium:0,rareEarth:0,agriculture:2,hydro:2,renewables:2,gdp:2},
+ RUS:{oil:5,gas:5,coal:5,iron:5,copper:4,lithium:2,uranium:5,rareEarth:3,agriculture:4,hydro:5,renewables:4,gdp:4},
+ NOR:{oil:4,gas:5,coal:0,iron:1,copper:1,lithium:0,uranium:0,rareEarth:0,agriculture:2,hydro:5,renewables:5,gdp:5},
+ GBR:{oil:2,gas:3,coal:2,iron:1,copper:0,lithium:0,uranium:0,rareEarth:0,agriculture:3,hydro:2,renewables:5,gdp:5},
+ DEU:{oil:0,gas:1,coal:4,iron:1,copper:0,lithium:0,uranium:0,rareEarth:0,agriculture:4,hydro:2,renewables:5,gdp:5},
+ POL:{oil:0,gas:1,coal:5,iron:2,copper:4,lithium:0,uranium:0,rareEarth:0,agriculture:3,hydro:1,renewables:3,gdp:4},
+ FRA:{oil:0,gas:0,coal:0,iron:1,copper:0,lithium:0,uranium:0,rareEarth:0,agriculture:4,hydro:3,renewables:4,gdp:5},
+ NLD:{oil:0,gas:3,coal:0,iron:0,copper:0,lithium:0,uranium:0,rareEarth:0,agriculture:4,hydro:1,renewables:4,gdp:5},
+ SWE:{oil:0,gas:0,coal:0,iron:5,copper:3,lithium:2,uranium:1,rareEarth:2,agriculture:2,hydro:5,renewables:5,gdp:5},
+ FIN:{oil:0,gas:0,coal:0,iron:3,copper:3,lithium:2,uranium:2,rareEarth:2,agriculture:2,hydro:4,renewables:5,gdp:5},
+ CHE:{oil:0,gas:0,coal:0,iron:0,copper:0,lithium:0,uranium:0,rareEarth:0,agriculture:2,hydro:5,renewables:4,gdp:5},
+ ITA:{oil:0,gas:1,coal:0,iron:0,copper:0,lithium:0,uranium:0,rareEarth:0,agriculture:4,hydro:3,renewables:4,gdp:5},
+ ESP:{oil:0,gas:0,coal:1,iron:2,copper:4,lithium:2,uranium:0,rareEarth:1,agriculture:4,hydro:3,renewables:5,gdp:4},
+ TUR:{oil:1,gas:1,coal:3,iron:3,copper:3,lithium:1,uranium:0,rareEarth:1,agriculture:4,hydro:4,renewables:4,gdp:3},
+ GRC:{oil:0,gas:0,coal:2,iron:1,copper:2,lithium:0,uranium:0,rareEarth:0,agriculture:3,hydro:2,renewables:4,gdp:3},
+ SAU:{oil:5,gas:5,coal:0,iron:0,copper:1,lithium:0,uranium:0,rareEarth:0,agriculture:1,hydro:0,renewables:4,gdp:4},
+ IRN:{oil:5,gas:5,coal:2,iron:3,copper:4,lithium:1,uranium:2,rareEarth:1,agriculture:3,hydro:3,renewables:3,gdp:3},
+ IRQ:{oil:5,gas:3,coal:0,iron:1,copper:0,lithium:0,uranium:0,rareEarth:0,agriculture:2,hydro:2,renewables:2,gdp:2},
+ KWT:{oil:5,gas:4,coal:0,iron:0,copper:0,lithium:0,uranium:0,rareEarth:0,agriculture:0,hydro:0,renewables:2,gdp:4},
+ QAT:{oil:4,gas:5,coal:0,iron:0,copper:0,lithium:0,uranium:0,rareEarth:0,agriculture:0,hydro:0,renewables:2,gdp:5},
+ ARE:{oil:4,gas:4,coal:0,iron:0,copper:0,lithium:0,uranium:0,rareEarth:0,agriculture:1,hydro:0,renewables:4,gdp:5},
+ OMN:{oil:3,gas:3,coal:0,iron:1,copper:2,lithium:0,uranium:0,rareEarth:0,agriculture:1,hydro:1,renewables:3,gdp:3},
+ KAZ:{oil:4,gas:3,coal:5,iron:4,copper:4,lithium:1,uranium:5,rareEarth:2,agriculture:3,hydro:3,renewables:2,gdp:3},
+ AZE:{oil:4,gas:5,coal:0,iron:1,copper:1,lithium:0,uranium:0,rareEarth:0,agriculture:2,hydro:2,renewables:2,gdp:3},
+ CHN:{oil:2,gas:3,coal:5,iron:5,copper:4,lithium:4,uranium:4,rareEarth:5,agriculture:5,hydro:5,renewables:5,gdp:5},
+ IND:{oil:1,gas:1,coal:5,iron:5,copper:3,lithium:1,uranium:2,rareEarth:2,agriculture:5,hydro:3,renewables:4,gdp:4},
+ PAK:{oil:1,gas:2,coal:3,iron:2,copper:3,lithium:0,uranium:1,rareEarth:0,agriculture:4,hydro:3,renewables:3,gdp:2},
+ IDN:{oil:2,gas:4,coal:5,iron:3,copper:4,lithium:0,uranium:0,rareEarth:1,agriculture:5,hydro:4,renewables:4,gdp:3},
+ MYS:{oil:3,gas:4,coal:2,iron:2,copper:1,lithium:0,uranium:0,rareEarth:0,agriculture:4,hydro:3,renewables:4,gdp:4},
+ AUS:{oil:3,gas:4,coal:5,iron:5,copper:5,lithium:5,uranium:5,rareEarth:3,agriculture:4,hydro:3,renewables:5,gdp:5},
+ NZL:{oil:1,gas:2,coal:1,iron:1,copper:0,lithium:0,uranium:0,rareEarth:0,agriculture:5,hydro:5,renewables:5,gdp:4},
+ JPN:{oil:0,gas:0,coal:0,iron:0,copper:0,lithium:0,uranium:0,rareEarth:0,agriculture:2,hydro:2,renewables:3,gdp:5},
+ KOR:{oil:0,gas:0,coal:0,iron:0,copper:0,lithium:0,uranium:0,rareEarth:0,agriculture:1,hydro:1,renewables:3,gdp:5},
+ TWN:{oil:0,gas:0,coal:0,iron:0,copper:0,lithium:0,uranium:0,rareEarth:0,agriculture:2,hydro:1,renewables:3,gdp:5},
+ ZAF:{oil:0,gas:1,coal:5,iron:3,copper:2,lithium:0,uranium:2,rareEarth:2,agriculture:3,hydro:2,renewables:3,gdp:3},
+ COD:{oil:0,gas:0,coal:0,iron:2,copper:5,lithium:0,uranium:2,rareEarth:4,agriculture:3,hydro:5,renewables:3,gdp:1},
+ ZMB:{oil:0,gas:0,coal:1,iron:1,copper:5,lithium:0,uranium:0,rareEarth:0,agriculture:3,hydro:3,renewables:2,gdp:2},
+ GHA:{oil:2,gas:2,coal:0,iron:0,copper:0,lithium:0,uranium:0,rareEarth:0,agriculture:4,hydro:2,renewables:2,gdp:2},
+ NGA:{oil:5,gas:5,coal:1,iron:1,copper:0,lithium:0,uranium:0,rareEarth:0,agriculture:4,hydro:2,renewables:2,gdp:2},
+ DZA:{oil:4,gas:5,coal:0,iron:2,copper:1,lithium:0,uranium:0,rareEarth:0,agriculture:2,hydro:1,renewables:3,gdp:3},
+ LBY:{oil:5,gas:3,coal:0,iron:0,copper:0,lithium:0,uranium:0,rareEarth:0,agriculture:1,hydro:0,renewables:2,gdp:2},
+ EGY:{oil:2,gas:4,coal:0,iron:2,copper:1,lithium:0,uranium:0,rareEarth:0,agriculture:3,hydro:2,renewables:4,gdp:3},
+ MAR:{oil:0,gas:0,coal:0,iron:1,copper:1,lithium:0,uranium:0,rareEarth:0,agriculture:3,hydro:2,renewables:4,gdp:2},
+ CHL:{oil:0,gas:1,coal:1,iron:2,copper:5,lithium:5,uranium:0,rareEarth:1,agriculture:3,hydro:4,renewables:5,gdp:3},
+ PER:{oil:1,gas:2,coal:1,iron:2,copper:5,lithium:1,uranium:0,rareEarth:0,agriculture:4,hydro:4,renewables:3,gdp:2},
+ ARG:{oil:3,gas:4,coal:1,iron:1,copper:2,lithium:5,uranium:0,rareEarth:0,agriculture:5,hydro:3,renewables:4,gdp:3},
+ BOL:{oil:1,gas:2,coal:0,iron:1,copper:1,lithium:5,uranium:0,rareEarth:0,agriculture:2,hydro:2,renewables:2,gdp:1},
+ COL:{oil:3,gas:2,coal:3,iron:1,copper:2,lithium:0,uranium:0,rareEarth:0,agriculture:4,hydro:4,renewables:3,gdp:2},
+ ECU:{oil:3,gas:1,coal:0,iron:0,copper:3,lithium:0,uranium:0,rareEarth:0,agriculture:4,hydro:4,renewables:3,gdp:2},
+ TZA:{oil:0,gas:2,coal:1,iron:1,copper:1,lithium:0,uranium:0,rareEarth:1,agriculture:3,hydro:3,renewables:2,gdp:1},
+ ISL:{oil:0,gas:0,coal:0,iron:0,copper:0,lithium:0,uranium:0,rareEarth:0,agriculture:1,hydro:5,renewables:5,gdp:4},
+ KEN:{oil:1,gas:0,coal:0,iron:0,copper:0,lithium:0,uranium:0,rareEarth:0,agriculture:3,hydro:3,renewables:5,gdp:2}
+};
+const RESOURCE_LABELS = {oil:{name:"نفت",icon:"🛢️"},gas:{name:"گاز طبیعی",icon:"🔥"},coal:{name:"زغال‌سنگ",icon:"⚫"},iron:{name:"سنگ‌آهن",icon:"⛏️"},copper:{name:"مس",icon:"🟠"},lithium:{name:"لیتیوم",icon:"🔋"},uranium:{name:"اورانیوم",icon:"☢️"},rareEarth:{name:"عناصر نادر خاکی",icon:"💎"},agriculture:{name:"کشاورزی",icon:"🌾"},hydro:{name:"برق‌آبی",icon:"💧"},renewables:{name:"انرژی تجدیدپذیر",icon:"☀️"}};
+function countryEconomy(code){
+ const p=WORLD_RESOURCE_PROFILES[code],fallback=COUNTRY_ECONOMY[code]||{income:3,energy:18,oil:5,steel:7,food:12};
+ if(!p)return fallback;
+ return {income:p.gdp,energy:Math.max(4,8+p.gas*2+p.coal*1.5+p.hydro*3+p.renewables*2),oil:p.oil*5+p.gas*1.5,steel:p.iron*3+p.coal,food:Math.max(3,5+p.agriculture*6)};
+}
 const STRAIT_CATALOG = [
  {id:"hormuz",name:"تنگه هرمز",controllerCodes:["IRN","OMN"],affectedCodes:["SAU","ARE","KWT","QAT","BHR","IRQ","IND","PAK","CHN","JPN","KOR"],description:"مسیر تجاری انرژی منطقه؛ بسته‌شدن آن درآمد و تولید نفت کشورهای وابسته را کاهش می‌دهد."},
  {id:"malacca",name:"تنگه مالاکا",controllerCodes:["MYS","IDN","SGP"],affectedCodes:["CHN","JPN","KOR","IND","AUS"],description:"مسیر اصلی تجارت شرق آسیا در بازی؛ بسته‌شدن آن روی درآمد و نفت کشورهای وابسته اثر می‌گذارد."},
@@ -544,7 +635,14 @@ const STRAIT_CATALOG = [
  {id:"bosporus",name:"تنگه بسفر",controllerCodes:["TUR"],affectedCodes:["RUS","UKR","ROU","BGR","GEO"],description:"گذرگاه تجاری دریای سیاه در اقتصاد شبیه‌سازی‌شده."},
  {id:"bab",name:"باب‌المندب",controllerCodes:["YEM","DJI","ERI"],affectedCodes:["EGY","SAU","ARE","IND"],description:"مسیر تجاری دریای سرخ در اقتصاد بازی."},
  {id:"danish",name:"تنگه‌های دانمارک",controllerCodes:["DNK"],affectedCodes:["DEU","SWE","POL","FIN"],description:"گذرگاه تجارت شمال اروپا در نقشه بازی."},
- {id:"taiwan",name:"تنگه تایوان",controllerCodes:["CHN","TWN"],affectedCodes:["JPN","KOR","PHL"],description:"مسیر تجاری شرق آسیا در اقتصاد بازی."}
+ {id:"taiwan",name:"تنگه تایوان",controllerCodes:["CHN","TWN"],affectedCodes:["JPN","KOR","PHL"],description:"مسیر تجاری شرق آسیا در اقتصاد بازی."},
+ {id:"suez",name:"کانال سوئز",controllerCodes:["EGY"],affectedCodes:["DEU","FRA","ITA","NLD","GBR","IND","CHN"],description:"کانال راهبردی اتصال دریای مدیترانه به دریای سرخ؛ مسیر کوتاه‌تر تجارت اروپا و آسیا."},
+ {id:"panama",name:"کانال پاناما",controllerCodes:["PAN"],affectedCodes:["USA","CHL","PER","ECU","JPN","KOR"],description:"کانال اتصال اقیانوس اطلس و آرام؛ در بازی زمان و هزینه تجارت بین دو اقیانوس را تغییر می‌دهد."},
+ {id:"english",name:"کانال مانش",controllerCodes:["GBR","FRA"],affectedCodes:["DEU","NLD","BEL","ESP"],description:"گذرگاه پرتردد میان بریتانیا و اروپای قاره‌ای."},
+ {id:"bering",name:"تنگه برینگ",controllerCodes:["RUS","USA"],affectedCodes:["JPN","KOR","CAN"],description:"گذرگاه میان اقیانوس آرام شمالی و اقیانوس منجمد شمالی."},
+ {id:"sunda",name:"تنگه سوندا",controllerCodes:["IDN"],affectedCodes:["AUS","CHN","JPN","KOR"],description:"مسیر دریایی میان جاوه و سوماترا در مجمع‌الجزایر اندونزی."},
+ {id:"lombok",name:"تنگه لومبوک",controllerCodes:["IDN"],affectedCodes:["AUS","CHN","JPN","KOR"],description:"مسیر عمیق دریایی میان بالی و لومبوک."},
+ {id:"mozambique",name:"کانال موزامبیک",controllerCodes:["MOZ","MDG"],affectedCodes:["ZAF","TZA","KEN"],description:"مسیر دریایی مهم در غرب ماداگاسکار."}
 ];
 
 async function applyProduction(id){
@@ -557,7 +655,7 @@ async function applyProduction(id){
     const levels=Object.fromEntries(b.rows.map(x=>[x.building_type,Number(x.level)]));
     const seconds=Math.max(0,Math.min(86400,Math.floor((Date.now()-new Date(p.rows[0].production_at).getTime())/1000)));
     const hours=seconds/3600;
-    const coinIncomePerSecond=300+Math.max(0,Number(p.rows[0].shop_income||0));
+    const coinIncomePerSecond=300*(0.55+Math.min(5,Math.max(1,Number(countryEconomy(p.rows[0].country_code).income||3)))*0.09)+Math.max(0,Number(p.rows[0].shop_income||0));
     if(seconds>=1){
       const base=countryEconomy(p.rows[0].country_code); let coins=seconds*coinIncomePerSecond,initialEnergy=Number(p.rows[0].energy),initialOil=Number(p.rows[0].oil),initialSteel=Number(p.rows[0].steel),initialFood=Number(p.rows[0].food),energy=initialEnergy+hours*base.energy*60,oil=initialOil+hours*base.oil*60,steel=initialSteel+hours*base.steel*60,food=initialFood+hours*base.food*60;
       const minutes=seconds/60;
@@ -742,6 +840,7 @@ app.post("/api/battles/launch",auth,async(req,res)=>{
   const defenderCountry=people.rows.find(p=>String(p.telegram_id)===target)?.country_code;
   if(!defenderCountry){await client.query("ROLLBACK");return res.status(404).json({ok:false,error:"کد کشور مدافع پیدا نشد."})}
   const sectorLat=Number(sectorInput.lat),sectorLng=Number(sectorInput.lng);
+  const battleWeather=seasonalSectorWeather(sectorLat,sectorLng),routeDistanceKm=countryDistanceKm(people.rows.find(p=>String(p.telegram_id)===attacker)?.country_code,defenderCountry);
   if(!pointInCountry(defenderCountry,sectorLng,sectorLat)){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"مختصات انتخابی داخل مرز کشور هدف نیست."})}
   const sectorX=Math.floor((sectorLng+180)*4),sectorY=Math.floor((sectorLat+90)*4),sectorKey=defenderCountry+":"+sectorX+":"+sectorY;
   const existingSector=await client.query("SELECT owner_id FROM territory_sectors WHERE sector_key=$1 FOR UPDATE",[sectorKey]);
@@ -775,12 +874,12 @@ app.post("/api/battles/launch",auth,async(req,res)=>{
     if(!st||qty>(am.get(type)||0)){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"موجودی یکی از یگان‌های انتخابی کافی نیست یا مدل معتبر نیست."})}
     const techBonus=st.category==="ground"?Number(attackerTech.military||0)*.06:st.category==="air"?Number(attackerTech.aviation||0)*.07:0;
     const commanderBonusForUnit=attackerAttackBonus+(st.category==="air"?attackerAirBonus:0);
-    ap+=qty*st.attack*(1+techBonus)*(1+commanderBonusForUnit);
+    ap+=qty*st.attack*(1+techBonus)*(1+commanderBonusForUnit)*(st.category==="air"?battleWeather.airFactor:battleWeather.groundFactor);
   }
   for(const [type,qty] of dm){
     if(qty<=0)continue;
     const st=stats(type);if(!st)continue;
-    dp+=qty*st.defense*(1+Number(defenderTech.defense||0)*.07)*(1+defenderDefenseBonus);
+    dp+=qty*st.defense*(1+Number(defenderTech.defense||0)*.07)*(1+defenderDefenseBonus)*battleWeather.defenseFactor;
     defending.push({type,qty});
   }
   const technologyBonuses={
@@ -793,8 +892,8 @@ app.post("/api/battles/launch",auth,async(req,res)=>{
   if(win)await client.query("INSERT INTO territory_sectors(sector_key,country_code,grid_x,grid_y,owner_id) VALUES($1,$2,$3,$4,$5) ON CONFLICT(sector_key) DO UPDATE SET owner_id=EXCLUDED.owner_id,captured_at=NOW()",[sectorKey,defenderCountry,sectorX,sectorY,attacker]);
   const arBase=Math.min(.38,Math.max(.04,(dp/total)*(win ? .30 : .58))),drBase=Math.min(.48,Math.max(.05,(ap/total)*(win ? .62 : .34)));
   const ar=Math.max(.02,arBase*(1-attackerLogistics)),dr=Math.max(.02,drBase*(1-defenderLogistics));
-  const totalCommitted=used.reduce((sum,[,qty])=>sum+Number(qty),0),baseOperationCost=Math.ceil(totalCommitted/1000);
-  const operationOilCost=Math.max(1,Math.ceil(baseOperationCost*(1-attackerLogistics))),operationEnergyCost=Math.max(0,Math.floor(baseOperationCost*(1-attackerLogistics)));
+  const totalCommitted=used.reduce((sum,[,qty])=>sum+Number(qty),0),baseOperationCost=Math.ceil(totalCommitted/1000),distanceCostFactor=1+Math.min(1.5,routeDistanceKm/6000);
+  const operationOilCost=Math.max(1,Math.ceil(baseOperationCost*distanceCostFactor*(1-attackerLogistics))),operationEnergyCost=Math.max(0,Math.ceil(baseOperationCost*distanceCostFactor*(1-attackerLogistics)));
   if(operationOilCost||operationEnergyCost){const paidOperation=await client.query("UPDATE players SET oil=oil-$1,energy=energy-$2 WHERE telegram_id=$3 AND oil>=$1 AND energy>=$2 RETURNING telegram_id",[operationOilCost,operationEnergyCost,attacker]);if(!paidOperation.rowCount){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"برای عملیات، نفت و انرژی کافی نداری. هر ۱۰۰۰ یگان اعزامی ۱ نفت و ۱ انرژی نیاز دارد؛ فرمانده لجستیک هزینه را کاهش می‌دهد."})}}
   const al={},dl={};
   const loot={coins:"0",oil:"0",steel:"0",food:"0",energy:"0"};
@@ -836,7 +935,7 @@ app.post("/api/battles/launch",auth,async(req,res)=>{
   await client.query("COMMIT");
   await publishWorldEvent("⚔️ "+summary+" قدرت مهاجم: "+Math.round(ap).toLocaleString("en-US")+" • قدرت دفاع: "+Math.round(dp).toLocaleString("en-US"),"war",{report:report.rows[0].id});
   await notifyPlayer(target,summary+" گزارش نبرد در بازی ثبت شد.","war",{report:report.rows[0].id});
-  res.json({ok:true,id:report.rows[0].id,summary,loot,attackerPower:ap,defenderPower:dp,attackerLosses:al,defenderLosses:dl,technologyBonuses,commanderBonuses:{attackerAttack:Math.round(attackerAttackBonus*100),attackerAir:Math.round(attackerAirBonus*100),defenderDefense:Math.round(defenderDefenseBonus*100),attackerLogistics:Math.round(attackerLogistics*100),defenderLogistics:Math.round(defenderLogistics*100)},operationCost:{oil:operationOilCost,energy:operationEnergyCost}});
+  res.json({ok:true,id:report.rows[0].id,summary,loot,attackerPower:ap,defenderPower:dp,attackerLosses:al,defenderLosses:dl,attackerComposition:al,defenderComposition:Object.fromEntries(defending.map(x=>[x.type,x.qty])),routeDistanceKm,weather:battleWeather,technologyBonuses,commanderBonuses:{attackerAttack:Math.round(attackerAttackBonus*100),attackerAir:Math.round(attackerAirBonus*100),defenderDefense:Math.round(defenderDefenseBonus*100),attackerLogistics:Math.round(attackerLogistics*100),defenderLogistics:Math.round(defenderLogistics*100)},operationCost:{oil:operationOilCost,energy:operationEnergyCost}});
  }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
 });
 app.get("/api/diplomacy",auth,async(req,res)=>{
@@ -848,6 +947,17 @@ app.get("/api/diplomacy",auth,async(req,res)=>{
     ORDER BY d.id DESC LIMIT 100`,[id]);
   const [p,sectors]=await Promise.all([pool.query("SELECT telegram_id,country_code,country_name,country_flag FROM players WHERE country_code IS NOT NULL AND telegram_id<>$1 ORDER BY country_name",[id]),pool.query("SELECT ts.sector_key,ts.country_code,ts.grid_x,ts.grid_y,ts.owner_id,p.country_name,p.country_flag FROM territory_sectors ts JOIN players p ON p.telegram_id=ts.owner_id")]);
   res.json({ok:true,relations:q.rows,players:p.rows,sectors:sectors.rows});
+});
+app.get("/api/world/intel",auth,async(req,res)=>{
+ const [players,controls]=await Promise.all([
+  pool.query("SELECT country_code,country_name,country_flag FROM players WHERE country_code IS NOT NULL"),
+  pool.query("SELECT sc.strait_id,sc.closed,p.country_name,p.country_flag FROM strait_controls sc JOIN players p ON p.telegram_id=sc.controller_id")
+ ]);
+ const owners=new Map(players.rows.map(p=>[p.country_code,p]));
+ const controlById=new Map(controls.rows.map(c=>[c.strait_id,c]));
+ const countries=Object.entries(WORLD_RESOURCE_PROFILES).map(([code,profile])=>{const owner=owners.get(code);return {code,profile,resources:Object.entries(profile).filter(([key,value])=>RESOURCE_LABELS[key]&&Number(value)>0).map(([key,value])=>({key,...RESOURCE_LABELS[key],level:Number(value)})),country_name:owner?.country_name||isoCountries.getName(code,"fa")||isoCountries.getName(code,"en")||code,country_flag:owner?.country_flag||null,controlled:!!owner}});
+ const waterways=STRAIT_CATALOG.map(w=>{const c=controlById.get(w.id);return {...w,closed:!!c?.closed,controller_country:c?.country_name||null,controller_flag:c?.country_flag||null}});
+ res.json({ok:true,countries,waterways,resourceScale:"شاخص وفور ۰ تا ۵؛ سطح بازی است و معادل ذخیره دقیق یا تولید واقعی نیست"});
 });
 app.get("/api/straits",auth,async(req,res)=>{
  const id=String(req.user.id),p=await pool.query("SELECT country_code FROM players WHERE telegram_id=$1",[id]);
