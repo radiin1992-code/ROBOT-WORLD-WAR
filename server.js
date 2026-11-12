@@ -99,7 +99,7 @@ async function initDb() {
       created_by BIGINT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
-    await pool.query("DELETE FROM military_units WHERE left(unit_type,6)='asset_'");    CREATE TABLE IF NOT EXISTS national_buildings (
+    CREATE TABLE IF NOT EXISTS national_buildings (
       telegram_id BIGINT NOT NULL REFERENCES players(telegram_id) ON DELETE CASCADE,
       building_type TEXT NOT NULL, level INT NOT NULL DEFAULT 0,
       PRIMARY KEY(telegram_id,building_type)
@@ -118,6 +118,7 @@ async function initDb() {
     CREATE INDEX IF NOT EXISTS diplomacy_target_idx ON diplomacy(to_id,status);
 
   `);
+  await pool.query("DELETE FROM military_units WHERE left(unit_type,6)='asset_'");
   await pool.query("ALTER TABLE players ADD COLUMN IF NOT EXISTS energy_level INT NOT NULL DEFAULT 1");
   await pool.query("ALTER TABLE players ADD COLUMN IF NOT EXISTS shop_cooldown_until TIMESTAMPTZ");
   await pool.query("ALTER TABLE players ADD COLUMN IF NOT EXISTS chat_id BIGINT");
