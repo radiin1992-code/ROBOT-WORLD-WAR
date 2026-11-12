@@ -181,6 +181,9 @@ async function initDb() {
     );
     CREATE INDEX IF NOT EXISTS battle_reports_players_idx ON battle_reports(attacker_id,defender_id,id DESC);
     ALTER TABLE battle_reports ADD COLUMN IF NOT EXISTS loot JSONB NOT NULL DEFAULT '{}'::jsonb;
+    ALTER TABLE battle_reports ADD COLUMN IF NOT EXISTS target_sector TEXT;
+    CREATE TABLE IF NOT EXISTS territory_sectors (sector_key TEXT PRIMARY KEY,country_code TEXT NOT NULL,grid_x INT NOT NULL,grid_y INT NOT NULL,owner_id BIGINT NOT NULL REFERENCES players(telegram_id) ON DELETE CASCADE,captured_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),UNIQUE(country_code,grid_x,grid_y));
+    CREATE INDEX IF NOT EXISTS territory_sectors_owner_idx ON territory_sectors(owner_id);
 
 
   `);
@@ -558,7 +561,7 @@ async function applyProduction(id){
         if(production.food)food+=minutes*active*Number(production.food);
         if(production.coins)buildingCoinIncome+=minutes*active*Number(production.coins);
       }
-      const [techRows,cityRows]=await Promise.all([client.query("SELECT tech_id,level FROM player_technologies WHERE telegram_id=$1",[String(id)]),client.query("SELECT COALESCE(SUM(level),0)::int AS total FROM player_cities WHERE telegram_id=$1",[String(id)])]); const tech=Object.fromEntries(techRows.rows.map(x=>[x.tech_id,Number(x.level)])); const cityBoost=1+Math.min(0.30,Number(cityRows.rows[0]?.total||0)*0.015); const event=getCurrentWorldEvent(); const industryBoost=cityBoost*(1+Number(tech.industry||0)*0.04+Number(tech.logistics||0)*0.02); const energyBoost=cityBoost*(1+Number(tech.energy||0)*0.05+Number(tech.logistics||0)*0.02)*(event.bonus==="energy"?1.25:1); const oilBoost=cityBoost*(1+Number(tech.logistics||0)*0.02); const steelBoost=cityBoost*(1+Number(tech.materials||0)*0.05+Number(tech.logistics||0)*0.02)*(event.bonus==="steel"?1.25:1); const foodBoost=cityBoost*(1+Number(tech.agriculture||0)*0.06+Number(tech.logistics||0)*0.02)*(event.bonus==="food"?1.25:1); coins+=Math.floor(buildingCoinIncome*industryBoost); await client.query("UPDATE players SET coins=coins+$1::numeric,energy=energy+$2::numeric,oil=oil+$3::numeric,steel=steel+$4::numeric,food=food+$5::numeric,production_at=production_at+($7::int * INTERVAL '1 second') WHERE telegram_id=$6",[String(coins),((energy-initialEnergy)*energyBoost).toFixed(6),((oil-initialOil)*oilBoost).toFixed(6),((steel-initialSteel)*steelBoost).toFixed(6),((food-initialFood)*foodBoost).toFixed(6),String(id),seconds]);
+      const [techRows,cityRows,territoryRows]=await Promise.all([client.query("SELECT tech_id,level FROM player_technologies WHERE telegram_id=$1",[String(id)]),client.query("SELECT COALESCE(SUM(level),0)::int AS total FROM player_cities WHERE telegram_id=$1",[String(id)]),client.query("SELECT COUNT(*)::int AS total FROM territory_sectors WHERE owner_id=$1",[String(id)])]); const territoryBoost=1+Math.min(0.20,Number(territoryRows.rows[0]?.total||0)*0.01); const tech=Object.fromEntries(techRows.rows.map(x=>[x.tech_id,Number(x.level)])); const cityBoost=1+Math.min(0.30,Number(cityRows.rows[0]?.total||0)*0.015); const event=getCurrentWorldEvent(); const industryBoost=cityBoost*territoryBoost*(1+Number(tech.industry||0)*0.04+Number(tech.logistics||0)*0.02); const energyBoost=cityBoost*territoryBoost*(1+Number(tech.energy||0)*0.05+Number(tech.logistics||0)*0.02)*(event.bonus==="energy"?1.25:1); const oilBoost=cityBoost*territoryBoost*(1+Number(tech.logistics||0)*0.02); const steelBoost=cityBoost*territoryBoost*(1+Number(tech.materials||0)*0.05+Number(tech.logistics||0)*0.02)*(event.bonus==="steel"?1.25:1); const foodBoost=cityBoost*territoryBoost*(1+Number(tech.agriculture||0)*0.06+Number(tech.logistics||0)*0.02)*(event.bonus==="food"?1.25:1); coins+=Math.floor(buildingCoinIncome*industryBoost); await client.query("UPDATE players SET coins=coins+$1::numeric,energy=energy+$2::numeric,oil=oil+$3::numeric,steel=steel+$4::numeric,food=food+$5::numeric,production_at=production_at+($7::int * INTERVAL '1 second') WHERE telegram_id=$6",[String(coins),((energy-initialEnergy)*energyBoost).toFixed(6),((oil-initialOil)*oilBoost).toFixed(6),((steel-initialSteel)*steelBoost).toFixed(6),((food-initialFood)*foodBoost).toFixed(6),String(id),seconds]);
     }
     await client.query("COMMIT");
   }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
@@ -720,7 +723,15 @@ app.post("/api/battles/launch",auth,async(req,res)=>{
   await client.query("BEGIN");
   const war=await client.query("SELECT id FROM diplomacy WHERE kind='war' AND status='active' AND ((from_id=$1 AND to_id=$2) OR (from_id=$2 AND to_id=$1)) FOR UPDATE",[attacker,target]);
   if(!war.rowCount){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"برای این کشور هنوز جنگ فعالی ثبت نشده است."})}
-  const people=await client.query("SELECT telegram_id,country_name FROM players WHERE telegram_id=ANY($1::bigint[]) AND country_code IS NOT NULL FOR UPDATE",[[attacker,target]]);
+  const people=await client.query("SELECT telegram_id,country_name,country_code FROM players WHERE telegram_id=ANY($1::bigint[]) AND country_code IS NOT NULL FOR UPDATE",[[attacker,target]]);
+  const sectorInput=req.body?.sector;
+  if(!sectorInput||!Number.isFinite(Number(sectorInput.lat))||!Number.isFinite(Number(sectorInput.lng))||Number(sectorInput.lat)<-85||Number(sectorInput.lat)>85||Number(sectorInput.lng)<-180||Number(sectorInput.lng)>180){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"ابتدا یک منطقه معتبر از داخل نقشه انتخاب کن."})}
+  const defenderCountry=people.rows.find(p=>String(p.telegram_id)===target)?.country_code;
+  if(!defenderCountry){await client.query("ROLLBACK");return res.status(404).json({ok:false,error:"کد کشور مدافع پیدا نشد."})}
+  const sectorLat=Number(sectorInput.lat),sectorLng=Number(sectorInput.lng),sectorX=Math.floor((sectorLng+180)/8),sectorY=Math.floor((sectorLat+90)/8),sectorKey=defenderCountry+":"+sectorX+":"+sectorY;
+  const existingSector=await client.query("SELECT owner_id FROM territory_sectors WHERE sector_key=$1 FOR UPDATE",[sectorKey]);
+  if(existingSector.rowCount&&String(existingSector.rows[0].owner_id)===attacker){await client.query("ROLLBACK");return res.status(409).json({ok:false,error:"این منطقه از قبل تحت کنترل کشور توست."})}
+  if(existingSector.rowCount&&String(existingSector.rows[0].owner_id)!==target){await client.query("ROLLBACK");return res.status(409).json({ok:false,error:"این منطقه در حال حاضر تحت کنترل کشور دیگری است."})}
   if(people.rowCount!==2){await client.query("ROLLBACK");return res.status(404).json({ok:false,error:"کشور مهاجم یا مدافع پیدا نشد."})}
   const cr=await client.query("SELECT unit_type,name,category,game_attack,game_defense,power FROM custom_unit_catalog");
   const custom=new Map(cr.rows.map(x=>[x.unit_type,{name:x.name,category:String(x.category||"support").toLowerCase(),attack:Number(x.game_attack||x.power||1),defense:Number(x.game_defense||Math.round(Number(x.power||1)*.55))}]));
@@ -764,6 +775,7 @@ app.post("/api/battles/launch",auth,async(req,res)=>{
   };
   if(!Number.isFinite(ap)||!Number.isFinite(dp)||ap<=0){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"قدرت ارتش برای نبرد کافی نیست."})}
   const win=ap>=dp,winner=win?attacker:target,total=ap+dp||1;
+  if(win)await client.query("INSERT INTO territory_sectors(sector_key,country_code,grid_x,grid_y,owner_id) VALUES($1,$2,$3,$4,$5) ON CONFLICT(sector_key) DO UPDATE SET owner_id=EXCLUDED.owner_id,captured_at=NOW()",[sectorKey,defenderCountry,sectorX,sectorY,attacker]);
   const arBase=Math.min(.38,Math.max(.04,(dp/total)*(win ? .30 : .58))),drBase=Math.min(.48,Math.max(.05,(ap/total)*(win ? .62 : .34)));
   const ar=Math.max(.02,arBase*(1-attackerLogistics)),dr=Math.max(.02,drBase*(1-defenderLogistics));
   const totalCommitted=used.reduce((sum,[,qty])=>sum+Number(qty),0),baseOperationCost=Math.ceil(totalCommitted/1000);
@@ -801,8 +813,8 @@ app.post("/api/battles/launch",auth,async(req,res)=>{
   if(defenderCommander?.id){const xp=winner===target?40:25;await client.query("UPDATE player_commanders SET level=CASE WHEN level<10 AND xp+$1>=level*100 THEN level+1 ELSE level END,xp=CASE WHEN level>=10 THEN 0 WHEN xp+$1>=level*100 THEN xp+$1-level*100 ELSE xp+$1 END WHERE id=$2",[xp,defenderCommander.id])}
   if(attackerCommander?.id)commanderText.push("تجربه فرمانده مهاجم +۲۵ XP");
   if(defenderCommander?.id)commanderText.push("تجربه فرمانده مدافع +"+(winner===target?40:25)+" XP");
-  const summary=(win?("🏆 "+names.get(attacker)+" در نبرد با "+names.get(target)+" پیروز شد."):("🛡️ "+names.get(target)+" حمله "+names.get(attacker)+" را دفع کرد."))+lootText+(techText.length?" 🧬 اثر فناوری: "+techText.join(" • "):"")+(commanderText.length?" 🎖️ فرماندهان: "+commanderText.join(" • "):"");
-  const report=await client.query("INSERT INTO battle_reports(attacker_id,defender_id,diplomacy_id,winner_id,attacker_power,defender_power,attacker_losses,defender_losses,loot,summary) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10) RETURNING id",[attacker,target,war.rows[0].id,winner,ap,dp,JSON.stringify(al),JSON.stringify(dl),JSON.stringify(loot),summary]);
+  const summary=(win?("🏆 "+names.get(attacker)+" در نبرد با "+names.get(target)+" پیروز شد و منطقهٔ انتخابی را تصرف کرد."):("🛡️ "+names.get(target)+" حمله "+names.get(attacker)+" را دفع کرد و منطقه حفظ شد."))+lootText+(techText.length?" 🧬 اثر فناوری: "+techText.join(" • "):"")+(commanderText.length?" 🎖️ فرماندهان: "+commanderText.join(" • "):"");
+  const report=await client.query("INSERT INTO battle_reports(attacker_id,defender_id,diplomacy_id,winner_id,attacker_power,defender_power,attacker_losses,defender_losses,loot,summary,target_sector) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11) RETURNING id",[attacker,target,war.rows[0].id,winner,ap,dp,JSON.stringify(al),JSON.stringify(dl),JSON.stringify(loot),summary,sectorKey]);
   await client.query("UPDATE players SET wins=wins+1 WHERE telegram_id=$1",[winner]);
   await client.query("INSERT INTO season_points(season_key,telegram_id,points) VALUES($1,$2,100) ON CONFLICT(season_key,telegram_id) DO UPDATE SET points=season_points.points+100,updated_at=NOW()",[getSeasonKey(),winner]);
   await client.query("UPDATE players SET losses=losses+1 WHERE telegram_id=$1",[winner===attacker?target:attacker]);
@@ -819,8 +831,8 @@ app.get("/api/diplomacy",auth,async(req,res)=>{
     FROM diplomacy d JOIN players a ON a.telegram_id=d.from_id JOIN players b ON b.telegram_id=d.to_id
     WHERE (d.from_id=$1 OR d.to_id=$1) AND d.status IN ('pending','active')
     ORDER BY d.id DESC LIMIT 100`,[id]);
-  const p=await pool.query("SELECT telegram_id,country_code,country_name,country_flag FROM players WHERE country_code IS NOT NULL AND telegram_id<>$1 ORDER BY country_name",[id]);
-  res.json({ok:true,relations:q.rows,players:p.rows});
+  const [p,sectors]=await Promise.all([pool.query("SELECT telegram_id,country_code,country_name,country_flag FROM players WHERE country_code IS NOT NULL AND telegram_id<>$1 ORDER BY country_name",[id]),pool.query("SELECT ts.sector_key,ts.country_code,ts.grid_x,ts.grid_y,ts.owner_id,p.country_name,p.country_flag FROM territory_sectors ts JOIN players p ON p.telegram_id=ts.owner_id")]);
+  res.json({ok:true,relations:q.rows,players:p.rows,sectors:sectors.rows});
 });
 app.post("/api/diplomacy",auth,async(req,res)=>{
   const action=req.body?.action,target=String(req.body?.target_id||"");
