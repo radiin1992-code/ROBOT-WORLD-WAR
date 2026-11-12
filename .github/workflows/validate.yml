@@ -2,7 +2,7 @@ name: Validate game source and realistic map
 
 on:
   push:
-    branches: [main, realistic-world-v2, feature/realistic-world-rebuild-2026]
+    branches: [main, realistic-world-v2, feature/realistic-world-rebuild-2026, feature/complete-world-map-overhaul]
   pull_request:
     branches: [main]
 
