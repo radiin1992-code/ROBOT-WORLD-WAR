@@ -27,7 +27,7 @@ for (const method of ["get","post","put","patch","delete"]) {
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.PGSSL === "true" ? { rejectUnauthorized: false } : undefined, max: 10, idleTimeoutMillis: 30000, connectionTimeoutMillis: 10000 });
 const OWNER_ID = "1852348620";
 const OWNER_IDS = new Set([OWNER_ID, "8881463089"]);
-const BUILD_VERSION='rw-20261112-23';
+const BUILD_VERSION='rw-20261112-24';
 const COMMANDER_CATALOG = [
  {key:"assault",name:"ژنرال آذرخش",role:"فرمانده تهاجمی",description:"رهبری تهاجمی و افزایش قدرت کل نیروی اعزامی",effect:"قدرت حمله +۱۵٪ در سطح ۱، به‌علاوه ۲٪ در هر سطح",base:15,perLevel:2,cost:{coins:120000,oil:250,steel:180,energy:120},image:"https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=720&q=85",icon:"⚔️"},
  {key:"defense",name:"ژنرال سپر آهنین",role:"فرمانده دفاعی",description:"استحکام خطوط دفاعی و افزایش قدرت دفاع کشور",effect:"قدرت دفاع +۲۰٪ در سطح ۱، به‌علاوه ۲٪ در هر سطح",base:20,perLevel:2,cost:{coins:100000,oil:150,steel:300,energy:150},image:"https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=720&q=85",icon:"🛡️"},
@@ -184,6 +184,8 @@ async function initDb() {
     ALTER TABLE battle_reports ADD COLUMN IF NOT EXISTS target_sector TEXT;
     CREATE TABLE IF NOT EXISTS territory_sectors (sector_key TEXT PRIMARY KEY,country_code TEXT NOT NULL,grid_x INT NOT NULL,grid_y INT NOT NULL,owner_id BIGINT NOT NULL REFERENCES players(telegram_id) ON DELETE CASCADE,captured_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),UNIQUE(country_code,grid_x,grid_y));
     CREATE INDEX IF NOT EXISTS territory_sectors_owner_idx ON territory_sectors(owner_id);
+    CREATE TABLE IF NOT EXISTS strait_controls (strait_id TEXT PRIMARY KEY,controller_id BIGINT NOT NULL REFERENCES players(telegram_id) ON DELETE CASCADE,closed BOOLEAN NOT NULL DEFAULT FALSE,updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+    CREATE INDEX IF NOT EXISTS strait_controls_closed_idx ON strait_controls(closed);
 
 
   `);
@@ -535,6 +537,15 @@ const COUNTRY_ECONOMY = {
  ARE:{income:5,energy:46,oil:32,steel:7,food:7}, NZL:{income:5,energy:39,oil:5,steel:8,food:27}
 };
 function countryEconomy(code){return COUNTRY_ECONOMY[code]||{income:5,energy:18,oil:5,steel:7,food:12};}
+const STRAIT_CATALOG = [
+ {id:"hormuz",name:"تنگه هرمز",controllerCodes:["IRN","OMN"],affectedCodes:["SAU","ARE","KWT","QAT","BHR","IRQ","IND","PAK","CHN","JPN","KOR"],description:"مسیر تجاری انرژی منطقه؛ بسته‌شدن آن درآمد و تولید نفت کشورهای وابسته را کاهش می‌دهد."},
+ {id:"malacca",name:"تنگه مالاکا",controllerCodes:["MYS","IDN","SGP"],affectedCodes:["CHN","JPN","KOR","IND","AUS"],description:"مسیر اصلی تجارت شرق آسیا در بازی؛ بسته‌شدن آن روی درآمد و نفت کشورهای وابسته اثر می‌گذارد."},
+ {id:"gibraltar",name:"تنگه جبل‌الطارق",controllerCodes:["ESP","MAR"],affectedCodes:["FRA","DEU","ITA","NLD","BEL","GBR"],description:"گذرگاه تجاری مدیترانه و اقیانوس اطلس در نقشه بازی."},
+ {id:"bosporus",name:"تنگه بسفر",controllerCodes:["TUR"],affectedCodes:["RUS","UKR","ROU","BGR","GEO"],description:"گذرگاه تجاری دریای سیاه در اقتصاد شبیه‌سازی‌شده."},
+ {id:"bab",name:"باب‌المندب",controllerCodes:["YEM","DJI","ERI"],affectedCodes:["EGY","SAU","ARE","IND"],description:"مسیر تجاری دریای سرخ در اقتصاد بازی."},
+ {id:"danish",name:"تنگه‌های دانمارک",controllerCodes:["DNK"],affectedCodes:["DEU","SWE","POL","FIN"],description:"گذرگاه تجارت شمال اروپا در نقشه بازی."},
+ {id:"taiwan",name:"تنگه تایوان",controllerCodes:["CHN","TWN"],affectedCodes:["JPN","KOR","PHL"],description:"مسیر تجاری شرق آسیا در اقتصاد بازی."}
+];
 
 async function applyProduction(id){
   const client=await pool.connect();
@@ -563,7 +574,7 @@ async function applyProduction(id){
         if(production.food)food+=minutes*active*Number(production.food);
         if(production.coins)buildingCoinIncome+=minutes*active*Number(production.coins);
       }
-      const [techRows,cityRows,territoryRows]=await Promise.all([client.query("SELECT tech_id,level FROM player_technologies WHERE telegram_id=$1",[String(id)]),client.query("SELECT COALESCE(SUM(level),0)::int AS total FROM player_cities WHERE telegram_id=$1",[String(id)]),client.query("SELECT COUNT(*)::int AS total FROM territory_sectors WHERE owner_id=$1",[String(id)])]); const territoryBoost=1+Math.min(0.20,Number(territoryRows.rows[0]?.total||0)*0.01); coins=Math.floor(coins*territoryBoost); const tech=Object.fromEntries(techRows.rows.map(x=>[x.tech_id,Number(x.level)])); const cityBoost=1+Math.min(0.30,Number(cityRows.rows[0]?.total||0)*0.015); const event=getCurrentWorldEvent(); const industryBoost=cityBoost*territoryBoost*(1+Number(tech.industry||0)*0.04+Number(tech.logistics||0)*0.02); const energyBoost=cityBoost*territoryBoost*(1+Number(tech.energy||0)*0.05+Number(tech.logistics||0)*0.02)*(event.bonus==="energy"?1.25:1); const oilBoost=cityBoost*territoryBoost*(1+Number(tech.logistics||0)*0.02); const steelBoost=cityBoost*territoryBoost*(1+Number(tech.materials||0)*0.05+Number(tech.logistics||0)*0.02)*(event.bonus==="steel"?1.25:1); const foodBoost=cityBoost*territoryBoost*(1+Number(tech.agriculture||0)*0.06+Number(tech.logistics||0)*0.02)*(event.bonus==="food"?1.25:1); coins+=Math.floor(buildingCoinIncome*industryBoost); await client.query("UPDATE players SET coins=coins+$1::numeric,energy=energy+$2::numeric,oil=oil+$3::numeric,steel=steel+$4::numeric,food=food+$5::numeric,production_at=production_at+($7::int * INTERVAL '1 second') WHERE telegram_id=$6",[String(coins),((energy-initialEnergy)*energyBoost).toFixed(6),((oil-initialOil)*oilBoost).toFixed(6),((steel-initialSteel)*steelBoost).toFixed(6),((food-initialFood)*foodBoost).toFixed(6),String(id),seconds]);
+      const [techRows,cityRows,territoryRows,closedStraitRows]=await Promise.all([client.query("SELECT tech_id,level FROM player_technologies WHERE telegram_id=$1",[String(id)]),client.query("SELECT COALESCE(SUM(level),0)::int AS total FROM player_cities WHERE telegram_id=$1",[String(id)]),client.query("SELECT COUNT(*)::int AS total FROM territory_sectors WHERE owner_id=$1",[String(id)]),client.query("SELECT strait_id,controller_id FROM strait_controls WHERE closed=true")]); const closedStraits=closedStraitRows.rows.map(x=>({definition:STRAIT_CATALOG.find(s=>s.id===x.strait_id),controllerId:String(x.controller_id)})).filter(x=>x.definition); const affectedStraits=closedStraits.filter(x=>x.controllerId!==String(id)&&x.definition.affectedCodes.includes(String(p.rows[0].country_code||""))); const controlledStraits=closedStraits.filter(x=>x.controllerId===String(id)); const coinTradeMultiplier=Math.max(0.55,1-affectedStraits.length*0.08)*(1+Math.min(0.15,controlledStraits.length*0.03)); const oilTradeMultiplier=Math.max(0.50,1-affectedStraits.length*0.12)*(1+Math.min(0.10,controlledStraits.length*0.02)); const territoryBoost=1+Math.min(0.20,Number(territoryRows.rows[0]?.total||0)*0.01); coins=Math.floor(coins*territoryBoost); const tech=Object.fromEntries(techRows.rows.map(x=>[x.tech_id,Number(x.level)])); const cityBoost=1+Math.min(0.30,Number(cityRows.rows[0]?.total||0)*0.015); const event=getCurrentWorldEvent(); const industryBoost=cityBoost*territoryBoost*(1+Number(tech.industry||0)*0.04+Number(tech.logistics||0)*0.02)*coinTradeMultiplier; const energyBoost=cityBoost*territoryBoost*(1+Number(tech.energy||0)*0.05+Number(tech.logistics||0)*0.02)*(event.bonus==="energy"?1.25:1); const oilBoost=cityBoost*territoryBoost*(1+Number(tech.logistics||0)*0.02)*oilTradeMultiplier; const steelBoost=cityBoost*territoryBoost*(1+Number(tech.materials||0)*0.05+Number(tech.logistics||0)*0.02)*(event.bonus==="steel"?1.25:1); const foodBoost=cityBoost*territoryBoost*(1+Number(tech.agriculture||0)*0.06+Number(tech.logistics||0)*0.02)*(event.bonus==="food"?1.25:1); coins+=Math.floor(buildingCoinIncome*industryBoost); await client.query("UPDATE players SET coins=coins+$1::numeric,energy=energy+$2::numeric,oil=oil+$3::numeric,steel=steel+$4::numeric,food=food+$5::numeric,production_at=production_at+($7::int * INTERVAL '1 second') WHERE telegram_id=$6",[String(coins),((energy-initialEnergy)*energyBoost).toFixed(6),((oil-initialOil)*oilBoost).toFixed(6),((steel-initialSteel)*steelBoost).toFixed(6),((food-initialFood)*foodBoost).toFixed(6),String(id),seconds]);
     }
     await client.query("COMMIT");
   }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
@@ -837,6 +848,30 @@ app.get("/api/diplomacy",auth,async(req,res)=>{
     ORDER BY d.id DESC LIMIT 100`,[id]);
   const [p,sectors]=await Promise.all([pool.query("SELECT telegram_id,country_code,country_name,country_flag FROM players WHERE country_code IS NOT NULL AND telegram_id<>$1 ORDER BY country_name",[id]),pool.query("SELECT ts.sector_key,ts.country_code,ts.grid_x,ts.grid_y,ts.owner_id,p.country_name,p.country_flag FROM territory_sectors ts JOIN players p ON p.telegram_id=ts.owner_id")]);
   res.json({ok:true,relations:q.rows,players:p.rows,sectors:sectors.rows});
+});
+app.get("/api/straits",auth,async(req,res)=>{
+ const id=String(req.user.id),p=await pool.query("SELECT country_code FROM players WHERE telegram_id=$1",[id]);
+ const controls=await pool.query("SELECT sc.strait_id,sc.controller_id,sc.closed,sc.updated_at,pl.country_name,pl.country_flag FROM strait_controls sc JOIN players pl ON pl.telegram_id=sc.controller_id");
+ const byId=new Map(controls.rows.map(x=>[x.strait_id,x]));
+ res.json({ok:true,straits:STRAIT_CATALOG.map(s=>{const c=byId.get(s.id);return {...s,closed:!!c?.closed,controller_id:c?String(c.controller_id):null,controller_country:c?.country_name||null,controller_flag:c?.country_flag||null,updated_at:c?.updated_at||null,can_control:s.controllerCodes.includes(String(p.rows[0]?.country_code||"")),is_controller:!!c&&String(c.controller_id)===id}})});
+});
+app.post("/api/straits/toggle",auth,async(req,res)=>{
+ const id=String(req.user.id),straitId=String(req.body?.strait_id||""),closed=req.body?.closed===true,definition=STRAIT_CATALOG.find(s=>s.id===straitId);
+ if(!definition)return res.status(400).json({ok:false,error:"تنگه انتخاب‌شده معتبر نیست."});
+ const client=await pool.connect();
+ try{
+  await client.query("BEGIN");
+  const player=await client.query("SELECT country_code,country_name FROM players WHERE telegram_id=$1 FOR UPDATE",[id]);
+  if(!player.rowCount||!definition.controllerCodes.includes(String(player.rows[0].country_code||""))){await client.query("ROLLBACK");return res.status(403).json({ok:false,error:"کشور انتخابی تو اختیار مدیریت این تنگه را ندارد."})}
+  await client.query("INSERT INTO strait_controls(strait_id,controller_id,closed) VALUES($1,$2,FALSE) ON CONFLICT(strait_id) DO NOTHING",[straitId,id]);
+  const current=await client.query("SELECT controller_id FROM strait_controls WHERE strait_id=$1 FOR UPDATE",[straitId]);
+  if(!current.rowCount||String(current.rows[0].controller_id)!==id){await client.query("ROLLBACK");return res.status(409).json({ok:false,error:"این تنگه قبلاً تحت مدیریت کشور دیگری ثبت شده است."})}
+  await client.query("UPDATE strait_controls SET closed=$1,updated_at=NOW() WHERE strait_id=$2 AND controller_id=$3",[closed,straitId,id]);
+  await client.query("COMMIT");
+  const message=(closed?"🔴 ":"🟢 ")+definition.name+(closed?" بسته شد. اثر اقتصادی بازی فعال شد.":" دوباره باز شد. اثر محدودیت تجاری برداشته شد.");
+  await publishWorldEvent(message,"diplomacy");
+  res.json({ok:true,closed,message});
+ }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
 });
 app.post("/api/diplomacy",auth,async(req,res)=>{
   const action=req.body?.action,target=String(req.body?.target_id||"");
