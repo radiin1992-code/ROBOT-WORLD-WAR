@@ -54,3 +54,13 @@ Owner-only operations are authorized server-side for the configured owner IDs. D
 ## Free-tier data warning
 
 Render free PostgreSQL databases have a limited lifetime and may not include backups. Check the current Render plan and database expiry before using this as the only copy of persistent player data.
+
+
+## RADINWAR 3000.3 command center
+- Research tree with six permanent technologies and prerequisite unlocks.
+- Three national cities, upgradeable to level 10; city levels improve production.
+- Player-to-player resource exchange with escrow, purchase fees, cancellation and automatic resource return.
+- Abstract in-game intelligence missions with a 60-minute cooldown, success chance, reports and limited resource rewards.
+- Weekly rotating global events that modify the affected resource or industry production.
+- Weekly competitive seasons with a points leaderboard and one-time milestone rewards.
+- The global alliance proposal is intentionally not included in this update.
