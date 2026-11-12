@@ -206,7 +206,7 @@ async function loadProfile(){const d=await api('profile');if(!d.ok)return false;
 function renderEconomy(){const names=[['oil','🛢️','نفت'],['steel','🔩','فولاد'],['food','🌾','غذا'],['energy','⚡','انرژی']];$('resourceGrid').innerHTML=names.map(([k,i,n])=>'<div class="resource-chip"><span>'+i+'</span><small>'+n+'</small><b>'+Number(me[k]||0).toLocaleString('en-US')+'</b></div>').join('');$('economyGrid').innerHTML='<div class="item"><b>💰 خزانه ملی</b><small>'+Number(me.coins).toLocaleString('en-US')+' پول</small></div>'+names.map(([k,i,n])=>'<div class="item"><b>'+i+' '+n+'</b><small>'+Number(me[k]||0).toLocaleString('en-US')+' واحد</small></div>').join('')}
 let shopPurchasePending=false,shopItems=[];
 function updateShopCard(card,item){
- const input=card.querySelector("[data-quantity]"),qty=Math.max(0,Math.floor(Number(input.value)||0));
+ const input=card.querySelector("[data-quantity]"),raw=String(input.value||"").replace(/[۰-۹]/g,d=>String("۰۱۲۳۴۵۶۷۸۹".indexOf(d))).replace(/[٠-٩]/g,d=>String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).replace(/[٬,\s]/g,""),qty=Math.max(0,Math.floor(Number(raw)||0));
  const max=Math.max(0,Math.floor(Number(me?.coins||0)/item.price));
  const totalPrice=qty*item.price,totalAmount=qty*item.amount,totalIncome=qty*item.incomeBonus;
  card.querySelector("[data-max]").disabled=max<1||shopPurchasePending;
@@ -220,13 +220,14 @@ function updateShopCard(card,item){
 async function loadShop(){
  const d=await api("shop");if(!d.ok)return;
  shopItems=d.items||[];
- $("shopGrid").innerHTML=shopItems.map(x=>'<div class="item shop-item" data-shop-id="'+x.id+'"><span class="icon">'+x.icon+'</span><b>'+x.name+'</b><small>مقدار هر عدد: '+x.amount.toLocaleString("en-US")+' واحد</small><small class="price">قیمت هر عدد: '+x.price.toLocaleString("en-US")+' پول</small><small class="cost">درآمد هر عدد: +'+Number(x.incomeBonus||0).toLocaleString("en-US")+' پول در ثانیه</small><div class="shop-quantity-row"><label>تعداد خرید</label><input class="field" type="number" min="1" max="1000000" step="1" inputmode="numeric" value="1" data-quantity><button class="btn shop-max" type="button" data-max>MAX</button></div><small data-receive>دریافت نهایی: '+x.amount+' واحد</small><small data-total>جمع خرید: '+x.price.toLocaleString("en-US")+' پول</small><small class="cost" data-income-total>افزایش درآمد: +'+Number(x.incomeBonus||0).toLocaleString("en-US")+' پول در ثانیه</small><button class="btn primary" data-buy>خرید ۱ عدد</button></div>').join("");
+ $("shopGrid").innerHTML=shopItems.map(x=>'<div class="item shop-item" data-shop-id="'+x.id+'"><span class="icon">'+x.icon+'</span><b>'+x.name+'</b><small>مقدار هر عدد: '+x.amount.toLocaleString("en-US")+' واحد</small><small class="price">قیمت هر عدد: '+x.price.toLocaleString("en-US")+' پول</small><small class="cost">درآمد هر عدد: +'+Number(x.incomeBonus||0).toLocaleString("en-US")+' پول در ثانیه</small><div class="shop-quantity-row"><label>تعداد خرید</label><input class="field" type="text" inputmode="numeric" autocomplete="off" value="1" data-quantity><button class="btn shop-max" type="button" data-max>MAX</button></div><small data-receive>دریافت نهایی: '+x.amount+' واحد</small><small data-total>جمع خرید: '+x.price.toLocaleString("en-US")+' پول</small><small class="cost" data-income-total>افزایش درآمد: +'+Number(x.incomeBonus||0).toLocaleString("en-US")+' پول در ثانیه</small><button class="btn primary" data-buy>خرید ۱ عدد</button></div>').join("");
  $("shopGrid").querySelectorAll(".shop-item").forEach(card=>{
   const item=shopItems.find(x=>x.id===card.dataset.shopId);
   card.querySelector("[data-quantity]").addEventListener("input",()=>updateShopCard(card,item));
   card.querySelector("[data-max]").onclick=()=>{const max=Math.max(0,Math.floor(Number(me?.coins||0)/item.price));card.querySelector("[data-quantity]").value=max;updateShopCard(card,item)};
   card.querySelector("[data-buy]").onclick=async()=>{
-   const quantity=Math.floor(Number(card.querySelector("[data-quantity]").value)||0);
+   const rawQuantity=String(card.querySelector("[data-quantity]").value||"").replace(/[۰-۹]/g,d=>String("۰۱۲۳۴۵۶۷۸۹".indexOf(d))).replace(/[٠-٩]/g,d=>String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).replace(/[٬,\s]/g,"");
+   const quantity=Math.floor(Number(rawQuantity)||0);
    const max=Math.floor(Number(me?.coins||0)/item.price);
    if(quantity<1||quantity>max){toast("تعداد انتخابی بیشتر از توان مالیته");return}
    shopPurchasePending=true;$("shopGrid").querySelectorAll(".shop-item").forEach(c=>{const it=shopItems.find(x=>x.id===c.dataset.shopId);updateShopCard(c,it)});
