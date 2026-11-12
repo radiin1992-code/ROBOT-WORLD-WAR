@@ -599,18 +599,28 @@ app.post("/api/battles/launch",auth,async(req,res)=>{
   ]);
   const attackerTech=Object.fromEntries(at.rows.map(x=>[x.tech_id,Number(x.level)]));
   const defenderTech=Object.fromEntries(dt.rows.map(x=>[x.tech_id,Number(x.level)]));
+  const commanderRows=await client.query("SELECT p.telegram_id,pc.id,pc.commander_key,pc.level FROM players p LEFT JOIN player_commanders pc ON pc.id=p.active_commander_id AND pc.telegram_id=p.telegram_id WHERE p.telegram_id=ANY($1::bigint[])",[[attacker,target]]);
+  const commanderByPlayer=new Map(commanderRows.rows.map(x=>[String(x.telegram_id),x.id?{id:String(x.id),key:x.commander_key,level:Number(x.level)}:null]));
+  const attackerCommander=commanderByPlayer.get(attacker)||null,defenderCommander=commanderByPlayer.get(target)||null;
+  const commanderBonus=(c,base,per)=>c?Math.min(base+per*(c.level-1),base+per*9)/100:0;
+  const attackerAttackBonus=attackerCommander?.key==="assault"?commanderBonus(attackerCommander,15,2):0;
+  const attackerAirBonus=attackerCommander?.key==="air"?commanderBonus(attackerCommander,15,2):0;
+  const defenderDefenseBonus=defenderCommander?.key==="defense"?commanderBonus(defenderCommander,20,2):0;
+  const attackerLogistics=attackerCommander?.key==="logistics"?commanderBonus(attackerCommander,10,1):0;
+  const defenderLogistics=defenderCommander?.key==="logistics"?commanderBonus(defenderCommander,10,1):0;
   const am=new Map(a.rows.map(x=>[x.unit_type,Number(x.quantity)])),dm=new Map(d.rows.map(x=>[x.unit_type,Number(x.quantity)]));
   const used=entries.filter(([,v])=>Number(v)>0);let ap=0,dp=0,defending=[];
   for(const [type,raw] of used){
     const qty=Number(raw),st=stats(type);
     if(!st||qty>(am.get(type)||0)){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"موجودی یکی از یگان‌های انتخابی کافی نیست یا مدل معتبر نیست."})}
     const techBonus=st.category==="ground"?Number(attackerTech.military||0)*.06:st.category==="air"?Number(attackerTech.aviation||0)*.07:0;
-    ap+=qty*st.attack*(1+techBonus);
+    const commanderBonusForUnit=attackerAttackBonus+(st.category==="air"?attackerAirBonus:0);
+    ap+=qty*st.attack*(1+techBonus)*(1+commanderBonusForUnit);
   }
   for(const [type,qty] of dm){
     if(qty<=0)continue;
     const st=stats(type);if(!st)continue;
-    dp+=qty*st.defense*(1+Number(defenderTech.defense||0)*.07);
+    dp+=qty*st.defense*(1+Number(defenderTech.defense||0)*.07)*(1+defenderDefenseBonus);
     defending.push({type,qty});
   }
   const technologyBonuses={
@@ -620,7 +630,11 @@ app.post("/api/battles/launch",auth,async(req,res)=>{
   };
   if(!Number.isFinite(ap)||!Number.isFinite(dp)||ap<=0){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"قدرت ارتش برای نبرد کافی نیست."})}
   const win=ap>=dp,winner=win?attacker:target,total=ap+dp||1;
-  const ar=Math.min(.38,Math.max(.04,(dp/total)*(win ? .30 : .58))),dr=Math.min(.48,Math.max(.05,(ap/total)*(win ? .62 : .34)));
+  const arBase=Math.min(.38,Math.max(.04,(dp/total)*(win ? .30 : .58))),drBase=Math.min(.48,Math.max(.05,(ap/total)*(win ? .62 : .34)));
+  const ar=Math.max(.02,arBase*(1-attackerLogistics)),dr=Math.max(.02,drBase*(1-defenderLogistics));
+  const totalCommitted=used.reduce((sum,[,qty])=>sum+Number(qty),0),baseOperationCost=Math.ceil(totalCommitted/1000);
+  const operationOilCost=Math.max(0,Math.floor(baseOperationCost*(1-attackerLogistics))),operationEnergyCost=Math.max(0,Math.floor(baseOperationCost*(1-attackerLogistics)));
+  if(operationOilCost||operationEnergyCost){const paidOperation=await client.query("UPDATE players SET oil=oil-$1,energy=energy-$2 WHERE telegram_id=$3 AND oil>=$1 AND energy>=$2 RETURNING telegram_id",[operationOilCost,operationEnergyCost,attacker]);if(!paidOperation.rowCount){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"برای عملیات، نفت و انرژی کافی نداری. هر ۱۰۰۰ یگان اعزامی ۱ نفت و ۱ انرژی نیاز دارد؛ فرمانده لجستیک هزینه را کاهش می‌دهد."})}}
   const al={},dl={};
   const loot={coins:"0",oil:"0",steel:"0",food:"0",energy:"0"};
   if(win){
@@ -641,7 +655,17 @@ app.post("/api/battles/launch",auth,async(req,res)=>{
   const names=new Map(people.rows.map(p=>[String(p.telegram_id),p.country_name||"کشور"]));
   const lootText=win?" غنیمت: "+[["🪙",loot.coins],["🛢️",loot.oil],["🔩",loot.steel],["🌾",loot.food],["⚡",loot.energy]].filter(([,v])=>BigInt(v)>0n).map(([icon,v])=>icon+" "+BigInt(v).toLocaleString("en-US")).join(" • "):"";
   const techText=[];if(technologyBonuses.attackerGroundAttack)techText.push("حمله زمینی مهاجم +"+technologyBonuses.attackerGroundAttack+"٪");if(technologyBonuses.attackerAirAttack)techText.push("حمله هوایی مهاجم +"+technologyBonuses.attackerAirAttack+"٪");if(technologyBonuses.defenderDefense)techText.push("دفاع مدافع +"+technologyBonuses.defenderDefense+"٪");
-  const summary=(win?("🏆 "+names.get(attacker)+" در نبرد با "+names.get(target)+" پیروز شد."):("🛡️ "+names.get(target)+" حمله "+names.get(attacker)+" را دفع کرد."))+lootText+(techText.length?" 🧬 اثر فناوری: "+techText.join(" • "):"");
+  const commanderText=[];
+  if(attackerCommander){const c=COMMANDER_CATALOG.find(x=>x.key===attackerCommander.key);commanderText.push("فرمانده مهاجم: "+c.name+" سطح "+attackerCommander.level)}
+  if(defenderCommander){const c=COMMANDER_CATALOG.find(x=>x.key===defenderCommander.key);commanderText.push("فرمانده مدافع: "+c.name+" سطح "+defenderCommander.level)}
+  if(attackerCommander?.key==="assault")commanderText.push("افزایش حمله مهاجم +"+Math.round(attackerAttackBonus*100)+"٪");
+  if(attackerCommander?.key==="air")commanderText.push("افزایش قدرت هوایی مهاجم +"+Math.round(attackerAirBonus*100)+"٪");
+  if(defenderCommander?.key==="defense")commanderText.push("افزایش دفاع مدافع +"+Math.round(defenderDefenseBonus*100)+"٪");
+  if(attackerCommander?.key==="logistics")commanderText.push("تخفیف هزینه عملیات مهاجم "+Math.round(attackerLogistics*100)+"٪");
+  if(defenderCommander?.key==="logistics")commanderText.push("کاهش تلفات مدافع "+Math.round(defenderLogistics*100)+"٪");
+  if(attackerCommander?.id)await client.query("UPDATE player_commanders SET xp=xp+25,level=CASE WHEN level<10 AND xp+25>=level*100 THEN level+1 ELSE level END,xp=CASE WHEN level<10 AND xp+25>=level*100 THEN xp+25-level*100 ELSE xp+25 END WHERE id=$1",[attackerCommander.id]);
+  if(defenderCommander?.id){const xp=winner===target?40:25;await client.query("UPDATE player_commanders SET xp=xp+$1,level=CASE WHEN level<10 AND xp+$1>=level*100 THEN level+1 ELSE level END,xp=CASE WHEN level<10 AND xp+$1>=level*100 THEN xp+$1-level*100 ELSE xp+$1 END WHERE id=$2",[xp,defenderCommander.id])}
+  const summary=(win?("🏆 "+names.get(attacker)+" در نبرد با "+names.get(target)+" پیروز شد."):("🛡️ "+names.get(target)+" حمله "+names.get(attacker)+" را دفع کرد."))+lootText+(techText.length?" 🧬 اثر فناوری: "+techText.join(" • "):"")+(commanderText.length?" 🎖️ فرماندهان: "+commanderText.join(" • "):"");
   const report=await client.query("INSERT INTO battle_reports(attacker_id,defender_id,diplomacy_id,winner_id,attacker_power,defender_power,attacker_losses,defender_losses,loot,summary) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10) RETURNING id",[attacker,target,war.rows[0].id,winner,ap,dp,JSON.stringify(al),JSON.stringify(dl),JSON.stringify(loot),summary]);
   await client.query("UPDATE players SET wins=wins+1 WHERE telegram_id=$1",[winner]);
   await client.query("INSERT INTO season_points(season_key,telegram_id,points) VALUES($1,$2,100) ON CONFLICT(season_key,telegram_id) DO UPDATE SET points=season_points.points+100,updated_at=NOW()",[getSeasonKey(),winner]);
@@ -649,7 +673,7 @@ app.post("/api/battles/launch",auth,async(req,res)=>{
   await client.query("COMMIT");
   await publishWorldEvent("⚔️ "+summary+" قدرت مهاجم: "+Math.round(ap).toLocaleString("en-US")+" • قدرت دفاع: "+Math.round(dp).toLocaleString("en-US"),"war",{report:report.rows[0].id});
   await notifyPlayer(target,summary+" گزارش نبرد در بازی ثبت شد.","war",{report:report.rows[0].id});
-  res.json({ok:true,id:report.rows[0].id,summary,loot,attackerPower:ap,defenderPower:dp,attackerLosses:al,defenderLosses:dl,technologyBonuses});
+  res.json({ok:true,id:report.rows[0].id,summary,loot,attackerPower:ap,defenderPower:dp,attackerLosses:al,defenderLosses:dl,technologyBonuses,commanderBonuses:{attackerAttack:Math.round(attackerAttackBonus*100),attackerAir:Math.round(attackerAirBonus*100),defenderDefense:Math.round(defenderDefenseBonus*100),attackerLogistics:Math.round(attackerLogistics*100),defenderLogistics:Math.round(defenderLogistics*100)},operationCost:{oil:operationOilCost,energy:operationEnergyCost}});
  }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
 });
 app.get("/api/diplomacy",auth,async(req,res)=>{
