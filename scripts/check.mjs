@@ -50,6 +50,9 @@ try {
 }
 if (!pkg.scripts?.start || !pkg.scripts?.test) throw new Error("Required npm scripts are missing.");
 
+if (!server.includes("let buildingCoinIncome=0") || !server.includes("coins+=Math.floor(buildingCoinIncome*industryBoost)") || !server.includes("const minutes=seconds/60")) throw new Error("Building income is not accrued using displayed per-minute rates.");
+if (!server.includes('agriculturecenter:{name:"مرکز کشاورزی"') || !server.includes('technologycenter:{name:"مرکز فناوری"') || !server.includes('factory:{name:"کارخانه صنعتی"')) throw new Error("Agriculture, technology, or factory buildings are missing.");
+if (!server.includes('toFixed(6)') || !server.includes('درآمد مستقیم پول')) throw new Error("Resource fractions or direct income labels are missing.");
 if (!server.includes("CREATE TABLE IF NOT EXISTS player_commanders") || !server.includes('/api/commanders/hire') || !server.includes('/api/commanders/upgrade') || !server.includes('/api/commanders/active')) throw new Error("Commander database or management APIs are missing.");
 if (!server.includes("attackerAttackBonus") || !server.includes("defenderDefenseBonus") || !server.includes("operationOilCost") || !server.includes("player_commanders SET xp=xp+")) throw new Error("Commander bonuses, battle costs, or XP are not applied.");
 if (!html.includes('id="commanderGrid"') || !html.includes('data-commander-hire') || !html.includes('data-commander-upgrade') || !html.includes('id="battleCommanderInfo"')) throw new Error("Commander academy or battle UI is missing.");
