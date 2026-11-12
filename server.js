@@ -250,7 +250,7 @@ app.get("/api/profile",auth,async(req,res)=>{
   p.military_power=military.rows.reduce((sum,row)=>sum+Number(row.quantity||0)*Number(UNIT_CATALOG[row.unit_type]?.power??powerByType[row.unit_type]??0),0);
   const ownedBuildings=await pool.query("SELECT building_type,level FROM national_buildings WHERE telegram_id=$1",[String(req.user.id)]);
   const buildingIncome=ownedBuildings.rows.reduce((sum,row)=>sum+Number(row.level||0)*Number(BUILDING_CATALOG[row.building_type]?.production?.coins||0),0);
-  p.income=300;p.gdp=Number(p.coins)*4;p.population=0;
+  p.income=300+Math.round(buildingIncome/60);p.gdp=Number(p.coins)*4;p.population=0;
   res.json({ok:true,profile:p});
 });
 app.get("/api/treasury",auth,async(req,res)=>{await applyProduction(req.user.id);const q=await pool.query("SELECT coins,country_code,industry,agriculture,level,shop_income FROM players WHERE telegram_id=$1",[String(req.user.id)]);if(!q.rowCount)return res.status(404).json({ok:false});const p=q.rows[0];const b=await pool.query("SELECT building_type,level FROM national_buildings WHERE telegram_id=$1",[String(req.user.id)]);const buildingIncome=b.rows.reduce((sum,row)=>sum+Number(row.level||0)*Number(BUILDING_CATALOG[row.building_type]?.production?.coins||0),0);const income=300;res.json({ok:true,coins:p.coins,income});});
@@ -375,51 +375,51 @@ for(const row of UNIT_DATABASE){
 }
 
 const BUILDING_CATALOG = {
-  power:{name:"نیروگاه برق",icon:"⚡",cost:{coins:13000,steel:90,oil:35,energy:0},production:{energy:30,coins:180},output:"تولید ۳۰ برق در ساعت"},
-  solar:{name:"مزرعه خورشیدی",icon:"☀️",cost:{coins:10400,steel:65,oil:0,energy:0},production:{energy:22,coins:150},output:"تولید ۲۲ برق در ساعت"},
-  wind:{name:"نیروگاه بادی",icon:"🌬️",cost:{coins:11600,steel:75,oil:0,energy:0},production:{energy:24,coins:160},output:"تولید ۲۴ برق در ساعت"},
-  hydro:{name:"نیروگاه آبی",icon:"💧",cost:{coins:17600,steel:130,oil:20,energy:0},production:{energy:28,coins:200},output:"تولید ۲۸ برق در ساعت"},
-  oilfield:{name:"میدان استخراج نفت",icon:"🛢️",cost:{coins:15200,steel:85,oil:15,energy:35},production:{oil:9,energyNeed:2,coins:300},output:"تولید ۹ نفت در ساعت"},
-  refinery:{name:"پالایشگاه نفت",icon:"🏭",cost:{coins:16400,steel:100,oil:0,energy:120},production:{oil:12,energyNeed:4,coins:420},output:"تولید ۱۲ نفت در ساعت"},
-  mine:{name:"معدن فولاد",icon:"⛏️",cost:{coins:14400,steel:45,oil:35,energy:45},production:{steel:8,energyNeed:4,coins:280},output:"تولید ۸ فولاد در ساعت"},
-  steelworks:{name:"کارخانه فولاد",icon:"🏗️",cost:{coins:19000,steel:60,oil:45,energy:150},production:{steel:10,energyNeed:6,coins:360},output:"تولید ۱۰ فولاد در ساعت"},
-  farm:{name:"مزرعه صنعتی",icon:"🌾",cost:{coins:9600,steel:35,oil:0,energy:55},production:{food:18,energyNeed:3,coins:240},output:"تولید ۱۸ غذا در ساعت"},
-  fishery:{name:"مرکز پرورش آبزیان",icon:"🐟",cost:{coins:7800,steel:28,oil:0,energy:35},production:{food:12,energyNeed:2,coins:200},output:"تولید ۱۲ غذا در ساعت"},
-  commercial:{name:"منطقه تجاری",icon:"🏙️",cost:{coins:18000,steel:75,oil:20,energy:65},production:{energyNeed:3,coins:1200},output:"بدون درآمد مستقیم پولی"},
-  mall:{name:"مجتمع خرید",icon:"🛍️",cost:{coins:25000,steel:95,oil:25,energy:90},production:{energyNeed:5,coins:1500},output:"بدون درآمد مستقیم پولی"},
-  tourism:{name:"مجموعه گردشگری",icon:"🏝️",cost:{coins:21000,steel:65,oil:15,energy:55},production:{energyNeed:3,coins:1400},output:"بدون درآمد مستقیم پولی"},
-  hotel:{name:"هتل بین‌المللی",icon:"🏨",cost:{coins:13600,steel:48,oil:10,energy:40},production:{energyNeed:2,coins:1100},output:"بدون درآمد مستقیم پولی"},
-  bank:{name:"مرکز خدمات مالی",icon:"🏦",cost:{coins:29000,steel:85,oil:20,energy:80},production:{energyNeed:4,coins:1800},output:"بدون درآمد مستقیم پولی"},
-  techpark:{name:"شهرک فناوری",icon:"💻",cost:{coins:35000,steel:120,oil:35,energy:150},production:{energyNeed:8,coins:1700},output:"بدون درآمد مستقیم پولی"},
-  cargoport:{name:"بندر تجاری",icon:"⚓",cost:{coins:19600,steel:110,oil:30,energy:75},production:{energyNeed:3,coins:950},output:"بدون درآمد مستقیم پولی"},
-  airport:{name:"فرودگاه باربری",icon:"🛫",cost:{coins:27000,steel:125,oil:45,energy:110},production:{energyNeed:5,coins:1250},output:"بدون درآمد مستقیم پولی"},
-  datacenter:{name:"مرکز داده",icon:"🖥️",cost:{coins:31000,steel:90,oil:25,energy:130},production:{energyNeed:6,coins:1750},output:"بدون درآمد مستقیم پولی"},
-  recycling:{name:"کارخانه بازیافت",icon:"♻️",cost:{coins:12200,steel:55,oil:10,energy:50},production:{steel:4,energyNeed:2,coins:220},output:"تولید ۴ فولاد در ساعت"},
-  geothermal:{name:"نیروگاه زمین‌گرمایی",icon:"🌋",cost:{coins:19600,steel:110,oil:10,energy:0},production:{energy:32,coins:220},output:"تولید ۳۲ برق در ساعت"},
-  nuclear:{name:"نیروگاه هسته‌ای بازی",icon:"☢️",cost:{coins:48000,steel:260,oil:0,energy:0},production:{energy:85,coins:500},output:"تولید ۸۵ برق در ساعت"},
-  tidal:{name:"نیروگاه جزرومدی",icon:"🌊",cost:{coins:23000,steel:145,oil:0,energy:0},production:{energy:30,coins:200},output:"تولید ۳۰ برق در ساعت"},
-  biomass:{name:"نیروگاه زیست‌توده",icon:"🍃",cost:{coins:13800,steel:75,oil:0,energy:0},production:{energy:20,coins:160},output:"تولید ۲۰ برق در ساعت"},
-  wastepower:{name:"نیروگاه تبدیل پسماند",icon:"♻️",cost:{coins:17000,steel:95,oil:0,energy:0},production:{energy:25,coins:190},output:"تولید ۲۵ برق در ساعت"},
-  solarpark:{name:"پارک خورشیدی بزرگ",icon:"🌞",cost:{coins:29000,steel:160,oil:0,energy:0},production:{energy:58,coins:300},output:"تولید ۵۸ برق در ساعت"},
-  offshorewind:{name:"مزرعه بادی فراساحلی",icon:"🌀",cost:{coins:33000,steel:190,oil:0,energy:0},production:{energy:62,coins:320},output:"تولید ۶۲ برق در ساعت"},
-  battery:{name:"مرکز ذخیره انرژی",icon:"🔋",cost:{coins:14400,steel:125,oil:0,energy:0},production:{energy:14,coins:130},output:"افزایش ۱۴ واحد برق در ساعت در اقتصاد بازی"},
-  gasfield:{name:"میدان گاز طبیعی",icon:"🔥",cost:{coins:19600,steel:100,oil:0,energy:30},production:{oil:16,energyNeed:3,coins:380},output:"تولید ۱۶ واحد سوخت در ساعت"},
-  petrochem:{name:"مجتمع پتروشیمی",icon:"🧪",cost:{coins:26400,steel:145,oil:60,energy:100},production:{energyNeed:6,coins:650},output:"بدون درآمد مستقیم پولی"},
-  factory:{name:"شهرک صنعتی",icon:"🏭",cost:{coins:23600,steel:120,oil:30,energy:100},production:{steel:3,energyNeed:6,coins:600},output:"تولید منابع بدون درآمد مستقیم پولی"},
-  electronics:{name:"کارخانه قطعات الکترونیکی",icon:"🔌",cost:{coins:29600,steel:130,oil:25,energy:140},production:{energyNeed:8,coins:850},output:"بدون درآمد مستقیم پولی"},
-  software:{name:"مرکز توسعه نرم‌افزار",icon:"🧑‍💻",cost:{coins:21600,steel:55,oil:10,energy:95},production:{energyNeed:5,coins:1050},output:"بدون درآمد مستقیم پولی"},
-  exchange:{name:"بورس و بازار سرمایه",icon:"📈",cost:{coins:37000,steel:90,oil:10,energy:90},production:{energyNeed:5,coins:2000},output:"بدون درآمد مستقیم پولی"},
-  logistics:{name:"مرکز لجستیک",icon:"🚚",cost:{coins:18400,steel:100,oil:35,energy:65},production:{energyNeed:3,coins:650},output:"بدون درآمد مستقیم پولی"},
-  containerport:{name:"پایانه کانتینری",icon:"🚢",cost:{coins:27600,steel:160,oil:35,energy:100},production:{energyNeed:5,coins:1000},output:"بدون درآمد مستقیم پولی"},
-  university:{name:"دانشگاه ملی",icon:"🎓",cost:{coins:25000,steel:85,oil:10,energy:75},production:{energyNeed:4,coins:500},output:"بدون درآمد مستقیم پولی"},
-  hospital:{name:"شبکه بیمارستانی",icon:"🏥",cost:{coins:22400,steel:105,oil:15,energy:85},production:{energyNeed:5,coins:420},output:"بدون درآمد مستقیم پولی"},
-  desalination:{name:"تأسیسات آب‌شیرین‌کن",icon:"💧",cost:{coins:19400,steel:115,oil:0,energy:95},production:{food:8,energyNeed:5,coins:280},output:"تولید ۸ غذا در ساعت"},
-  greenhouse:{name:"گلخانه هوشمند",icon:"🌱",cost:{coins:15200,steel:70,oil:0,energy:60},production:{food:28,energyNeed:3,coins:300},output:"تولید ۲۸ غذا در ساعت"},
-  livestock:{name:"مجتمع دامپروری",icon:"🐄",cost:{coins:12800,steel:55,oil:0,energy:45},production:{food:22,energyNeed:2,coins:260},output:"تولید ۲۲ غذا در ساعت"},
-  quarry:{name:"معدن سنگ و مواد خام",icon:"🪨",cost:{coins:13800,steel:40,oil:20,energy:55},production:{steel:12,energyNeed:3,coins:270},output:"تولید ۱۲ فولاد در ساعت"},
-  lithium:{name:"معدن مواد پیشرفته",icon:"💎",cost:{coins:25600,steel:100,oil:25,energy:100},production:{steel:18,energyNeed:6,coins:450},output:"تولید ۱۸ فولاد در ساعت"},
-  media:{name:"شبکه رسانه‌ای",icon:"📡",cost:{coins:17400,steel:45,oil:10,energy:50},production:{energyNeed:2,coins:700},output:"بدون درآمد مستقیم پولی"},
-  research:{name:"مرکز پژوهش و نوآوری",icon:"🔬",cost:{coins:32400,steel:125,oil:15,energy:145},production:{energyNeed:7,coins:750},output:"بدون درآمد مستقیم پولی"},
+  power:{name:"نیروگاه برق",icon:"⚡",cost:{coins:13000,steel:90,oil:35,energy:0},production:{energy:30,coins:180},output:"تولید ۳۰ برق در ساعت • درآمد 180 پول در ساعت"},
+  solar:{name:"مزرعه خورشیدی",icon:"☀️",cost:{coins:10400,steel:65,oil:0,energy:0},production:{energy:22,coins:150},output:"تولید ۲۲ برق در ساعت • درآمد 150 پول در ساعت"},
+  wind:{name:"نیروگاه بادی",icon:"🌬️",cost:{coins:11600,steel:75,oil:0,energy:0},production:{energy:24,coins:160},output:"تولید ۲۴ برق در ساعت • درآمد 160 پول در ساعت"},
+  hydro:{name:"نیروگاه آبی",icon:"💧",cost:{coins:17600,steel:130,oil:20,energy:0},production:{energy:28,coins:200},output:"تولید ۲۸ برق در ساعت • درآمد 200 پول در ساعت"},
+  oilfield:{name:"میدان استخراج نفت",icon:"🛢️",cost:{coins:15200,steel:85,oil:15,energy:35},production:{oil:9,energyNeed:2,coins:300},output:"تولید ۹ نفت در ساعت • درآمد 300 پول در ساعت"},
+  refinery:{name:"پالایشگاه نفت",icon:"🏭",cost:{coins:16400,steel:100,oil:0,energy:120},production:{oil:12,energyNeed:4,coins:420},output:"تولید ۱۲ نفت در ساعت • درآمد 420 پول در ساعت"},
+  mine:{name:"معدن فولاد",icon:"⛏️",cost:{coins:14400,steel:45,oil:35,energy:45},production:{steel:8,energyNeed:4,coins:280},output:"تولید ۸ فولاد در ساعت • درآمد 280 پول در ساعت"},
+  steelworks:{name:"کارخانه فولاد",icon:"🏗️",cost:{coins:19000,steel:60,oil:45,energy:150},production:{steel:10,energyNeed:6,coins:360},output:"تولید ۱۰ فولاد در ساعت • درآمد 360 پول در ساعت"},
+  farm:{name:"مزرعه صنعتی",icon:"🌾",cost:{coins:9600,steel:35,oil:0,energy:55},production:{food:18,energyNeed:3,coins:240},output:"تولید ۱۸ غذا در ساعت • درآمد 240 پول در ساعت"},
+  fishery:{name:"مرکز پرورش آبزیان",icon:"🐟",cost:{coins:7800,steel:28,oil:0,energy:35},production:{food:12,energyNeed:2,coins:200},output:"تولید ۱۲ غذا در ساعت • درآمد 200 پول در ساعت"},
+  commercial:{name:"منطقه تجاری",icon:"🏙️",cost:{coins:18000,steel:75,oil:20,energy:65},production:{energyNeed:3,coins:1200},output:"بدون درآمد مستقیم پولی • درآمد 1200 پول در ساعت"},
+  mall:{name:"مجتمع خرید",icon:"🛍️",cost:{coins:25000,steel:95,oil:25,energy:90},production:{energyNeed:5,coins:1500},output:"بدون درآمد مستقیم پولی • درآمد 1500 پول در ساعت"},
+  tourism:{name:"مجموعه گردشگری",icon:"🏝️",cost:{coins:21000,steel:65,oil:15,energy:55},production:{energyNeed:3,coins:1400},output:"بدون درآمد مستقیم پولی • درآمد 1400 پول در ساعت"},
+  hotel:{name:"هتل بین‌المللی",icon:"🏨",cost:{coins:13600,steel:48,oil:10,energy:40},production:{energyNeed:2,coins:1100},output:"بدون درآمد مستقیم پولی • درآمد 1100 پول در ساعت"},
+  bank:{name:"مرکز خدمات مالی",icon:"🏦",cost:{coins:29000,steel:85,oil:20,energy:80},production:{energyNeed:4,coins:1800},output:"بدون درآمد مستقیم پولی • درآمد 1800 پول در ساعت"},
+  techpark:{name:"شهرک فناوری",icon:"💻",cost:{coins:35000,steel:120,oil:35,energy:150},production:{energyNeed:8,coins:1700},output:"بدون درآمد مستقیم پولی • درآمد 1700 پول در ساعت"},
+  cargoport:{name:"بندر تجاری",icon:"⚓",cost:{coins:19600,steel:110,oil:30,energy:75},production:{energyNeed:3,coins:950},output:"بدون درآمد مستقیم پولی • درآمد 950 پول در ساعت"},
+  airport:{name:"فرودگاه باربری",icon:"🛫",cost:{coins:27000,steel:125,oil:45,energy:110},production:{energyNeed:5,coins:1250},output:"بدون درآمد مستقیم پولی • درآمد 1250 پول در ساعت"},
+  datacenter:{name:"مرکز داده",icon:"🖥️",cost:{coins:31000,steel:90,oil:25,energy:130},production:{energyNeed:6,coins:1750},output:"بدون درآمد مستقیم پولی • درآمد 1750 پول در ساعت"},
+  recycling:{name:"کارخانه بازیافت",icon:"♻️",cost:{coins:12200,steel:55,oil:10,energy:50},production:{steel:4,energyNeed:2,coins:220},output:"تولید ۴ فولاد در ساعت • درآمد 220 پول در ساعت"},
+  geothermal:{name:"نیروگاه زمین‌گرمایی",icon:"🌋",cost:{coins:19600,steel:110,oil:10,energy:0},production:{energy:32,coins:220},output:"تولید ۳۲ برق در ساعت • درآمد 220 پول در ساعت"},
+  nuclear:{name:"نیروگاه هسته‌ای بازی",icon:"☢️",cost:{coins:48000,steel:260,oil:0,energy:0},production:{energy:85,coins:500},output:"تولید ۸۵ برق در ساعت • درآمد 500 پول در ساعت"},
+  tidal:{name:"نیروگاه جزرومدی",icon:"🌊",cost:{coins:23000,steel:145,oil:0,energy:0},production:{energy:30,coins:200},output:"تولید ۳۰ برق در ساعت • درآمد 200 پول در ساعت"},
+  biomass:{name:"نیروگاه زیست‌توده",icon:"🍃",cost:{coins:13800,steel:75,oil:0,energy:0},production:{energy:20,coins:160},output:"تولید ۲۰ برق در ساعت • درآمد 160 پول در ساعت"},
+  wastepower:{name:"نیروگاه تبدیل پسماند",icon:"♻️",cost:{coins:17000,steel:95,oil:0,energy:0},production:{energy:25,coins:190},output:"تولید ۲۵ برق در ساعت • درآمد 190 پول در ساعت"},
+  solarpark:{name:"پارک خورشیدی بزرگ",icon:"🌞",cost:{coins:29000,steel:160,oil:0,energy:0},production:{energy:58,coins:300},output:"تولید ۵۸ برق در ساعت • درآمد 300 پول در ساعت"},
+  offshorewind:{name:"مزرعه بادی فراساحلی",icon:"🌀",cost:{coins:33000,steel:190,oil:0,energy:0},production:{energy:62,coins:320},output:"تولید ۶۲ برق در ساعت • درآمد 320 پول در ساعت"},
+  battery:{name:"مرکز ذخیره انرژی",icon:"🔋",cost:{coins:14400,steel:125,oil:0,energy:0},production:{energy:14,coins:130},output:"افزایش ۱۴ واحد برق در ساعت در اقتصاد بازی • درآمد 130 پول در ساعت"},
+  gasfield:{name:"میدان گاز طبیعی",icon:"🔥",cost:{coins:19600,steel:100,oil:0,energy:30},production:{oil:16,energyNeed:3,coins:380},output:"تولید ۱۶ واحد سوخت در ساعت • درآمد 380 پول در ساعت"},
+  petrochem:{name:"مجتمع پتروشیمی",icon:"🧪",cost:{coins:26400,steel:145,oil:60,energy:100},production:{energyNeed:6,coins:650},output:"بدون درآمد مستقیم پولی • درآمد 650 پول در ساعت"},
+  factory:{name:"شهرک صنعتی",icon:"🏭",cost:{coins:23600,steel:120,oil:30,energy:100},production:{steel:3,energyNeed:6,coins:600},output:"تولید منابع بدون درآمد مستقیم پولی • درآمد 600 پول در ساعت"},
+  electronics:{name:"کارخانه قطعات الکترونیکی",icon:"🔌",cost:{coins:29600,steel:130,oil:25,energy:140},production:{energyNeed:8,coins:850},output:"بدون درآمد مستقیم پولی • درآمد 850 پول در ساعت"},
+  software:{name:"مرکز توسعه نرم‌افزار",icon:"🧑‍💻",cost:{coins:21600,steel:55,oil:10,energy:95},production:{energyNeed:5,coins:1050},output:"بدون درآمد مستقیم پولی • درآمد 1050 پول در ساعت"},
+  exchange:{name:"بورس و بازار سرمایه",icon:"📈",cost:{coins:37000,steel:90,oil:10,energy:90},production:{energyNeed:5,coins:2000},output:"بدون درآمد مستقیم پولی • درآمد 2000 پول در ساعت"},
+  logistics:{name:"مرکز لجستیک",icon:"🚚",cost:{coins:18400,steel:100,oil:35,energy:65},production:{energyNeed:3,coins:650},output:"بدون درآمد مستقیم پولی • درآمد 650 پول در ساعت"},
+  containerport:{name:"پایانه کانتینری",icon:"🚢",cost:{coins:27600,steel:160,oil:35,energy:100},production:{energyNeed:5,coins:1000},output:"بدون درآمد مستقیم پولی • درآمد 1000 پول در ساعت"},
+  university:{name:"دانشگاه ملی",icon:"🎓",cost:{coins:25000,steel:85,oil:10,energy:75},production:{energyNeed:4,coins:500},output:"بدون درآمد مستقیم پولی • درآمد 500 پول در ساعت"},
+  hospital:{name:"شبکه بیمارستانی",icon:"🏥",cost:{coins:22400,steel:105,oil:15,energy:85},production:{energyNeed:5,coins:420},output:"بدون درآمد مستقیم پولی • درآمد 420 پول در ساعت"},
+  desalination:{name:"تأسیسات آب‌شیرین‌کن",icon:"💧",cost:{coins:19400,steel:115,oil:0,energy:95},production:{food:8,energyNeed:5,coins:280},output:"تولید ۸ غذا در ساعت • درآمد 280 پول در ساعت"},
+  greenhouse:{name:"گلخانه هوشمند",icon:"🌱",cost:{coins:15200,steel:70,oil:0,energy:60},production:{food:28,energyNeed:3,coins:300},output:"تولید ۲۸ غذا در ساعت • درآمد 300 پول در ساعت"},
+  livestock:{name:"مجتمع دامپروری",icon:"🐄",cost:{coins:12800,steel:55,oil:0,energy:45},production:{food:22,energyNeed:2,coins:260},output:"تولید ۲۲ غذا در ساعت • درآمد 260 پول در ساعت"},
+  quarry:{name:"معدن سنگ و مواد خام",icon:"🪨",cost:{coins:13800,steel:40,oil:20,energy:55},production:{steel:12,energyNeed:3,coins:270},output:"تولید ۱۲ فولاد در ساعت • درآمد 270 پول در ساعت"},
+  lithium:{name:"معدن مواد پیشرفته",icon:"💎",cost:{coins:25600,steel:100,oil:25,energy:100},production:{steel:18,energyNeed:6,coins:450},output:"تولید ۱۸ فولاد در ساعت • درآمد 450 پول در ساعت"},
+  media:{name:"شبکه رسانه‌ای",icon:"📡",cost:{coins:17400,steel:45,oil:10,energy:50},production:{energyNeed:2,coins:700},output:"بدون درآمد مستقیم پولی • درآمد 700 پول در ساعت"},
+  research:{name:"مرکز پژوهش و نوآوری",icon:"🔬",cost:{coins:32400,steel:125,oil:15,energy:145},production:{energyNeed:7,coins:750},output:"بدون درآمد مستقیم پولی • درآمد 750 پول در ساعت"},
 };
 
 const COUNTRY_ECONOMY = {
@@ -456,13 +456,14 @@ async function applyProduction(id){
       for(const key of ["power","solar","wind","hydro","geothermal","nuclear","tidal","biomass","wastepower","solarpark","offshorewind","battery"])energy+=hours*(levels[key]||0)*Number(BUILDING_CATALOG[key].production.energy||0);
       for(const [key,item] of Object.entries(BUILDING_CATALOG)){
         const production=item.production||{},level=levels[key]||0;
-        if(!level||production.energy)continue;
+        if(!level)continue;
+        if(production.energy){if(production.coins)coins+=hours*level*production.coins;continue;}
         const need=Number(production.energyNeed||0),active=need>0?Math.min(level,energy/(hours*need)):level;
         if(need>0)energy=Math.max(0,energy-hours*active*need);
         if(production.oil)oil+=hours*active*production.oil;
         if(production.steel)steel+=hours*active*production.steel;
         if(production.food)food+=hours*active*production.food;
-         if(production.coins)coins+=hours*active*production.coins;
+        if(production.coins)coins+=hours*active*production.coins;
       }
       await client.query("UPDATE players SET coins=coins+$1::numeric,energy=energy+$2::numeric,oil=oil+$3::numeric,steel=steel+$4::numeric,food=food+$5::numeric,production_at=NOW() WHERE telegram_id=$6",[Math.floor(coins).toString(),(Math.floor(energy)-Math.floor(initialEnergy)).toString(),(Math.floor(oil)-Math.floor(initialOil)).toString(),(Math.floor(steel)-Math.floor(initialSteel)).toString(),(Math.floor(food)-Math.floor(initialFood)).toString(),String(id)]);
     }
