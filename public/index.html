@@ -213,6 +213,7 @@ header{background:linear-gradient(100deg,#071321f5,#142344f2 48%,#201637f2);box-
    <button class="action-card army" data-view="army"><b>ارتش</b><span class="card-icon">🛡️</span></button>
    <button class="action-card war" data-view="war"><b>جنگ</b><span class="card-icon">⚔️</span></button>
    <button class="action-card economy" data-view="economy"><small>آماده‌ی سرمایه‌گذاری</small><b>اقتصاد</b><span class="card-icon">📈</span></button>
+   <button class="action-card economy" data-view="economy"><small>کد مخفی مدیرها</small><b>کد جایزه</b><span class="card-icon">🎁</span></button>
    <button class="action-card diplomacy" data-view="diplomacy"><b>دیپلماسی</b><span class="card-icon">🏛️</span></button>
    <button class="action-card market" data-view="market"><b>بازار جهانی</b><span class="card-icon">🌍</span></button>
    <button class="action-card infra" data-view="economy"><b>زیرساخت</b><span class="card-icon">🏗️</span></button>
@@ -616,7 +617,7 @@ $("spyLaunch")?.addEventListener("click",async()=>{const target=$("spyTarget").v
 
 function switchView(name){document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('active',x.dataset.view===name));document.querySelectorAll('.bottom-nav button').forEach(x=>x.classList.toggle('active',x.dataset.view===name));document.querySelectorAll('.view').forEach(x=>x.classList.toggle('active',x.id===name));if(window.radinwarGlobe){if(name==='map')window.radinwarGlobe.resumeAnimation?.();else window.radinwarGlobe.pauseAnimation?.()}if(name==='map'){loadGeo().then(()=>drawGlobe());}if(name==='army'||name==='economy')loadArmy();if(name==='war'||name==='diplomacy')loadDiplomacy();if(name==='market')loadNews();if(name==='announcements')loadAnnouncements();if(name==='groups'){loadGroups();loadGroupInvitations();}if(name==='private')loadPlayers();if(name==='commandcenter')loadCommandCenter();window.scrollTo({top:0,behavior:'smooth'})}document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>switchView(b.dataset.view));
 const originalLoadPlayers=loadPlayers;loadPlayers=async()=>{await originalLoadPlayers();fillMemberSelect()};
-const CLIENT_BUILD_VERSION='rw-20261112-18';let updateReloadStarted=false;
+const CLIENT_BUILD_VERSION='rw-20261112-19';let updateReloadStarted=false;
 async function checkServerVersion(){
  if(updateReloadStarted||!INIT_DATA)return;
  try{
