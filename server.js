@@ -42,6 +42,36 @@ const APP_LINK = (view, extra={}) => { const u=new URL(MINI_APP_URL);u.searchPar
 async function notifyPlayer(id,message,view,extra={}) { const q=await pool.query("SELECT chat_id FROM players WHERE telegram_id=$1 AND chat_id IS NOT NULL",[String(id)]); if(!q.rowCount)return; await telegramApi("sendMessage",{chat_id:q.rows[0].chat_id,text:message,reply_markup:{inline_keyboard:[[{text:"📄 نمایش گزارش",web_app:{url:APP_LINK(view,extra)}}]]}}); }
 async function publishWorldEvent(message,view="market",extra={}) { const q=await pool.query("INSERT INTO world_news(message) VALUES($1) RETURNING id",[message]); const id=q.rows[0].id; const users=await pool.query("SELECT chat_id FROM players WHERE chat_id IS NOT NULL"); await Promise.allSettled(users.rows.map(p=>telegramApi("sendMessage",{chat_id:p.chat_id,text:"📡 رویداد داخل بازی\n\n"+message,reply_markup:{inline_keyboard:[[{text:"📄 نمایش گزارش",web_app:{url:APP_LINK(view,{...extra,report:extra.report||id,news:id})}}]]}}))); return id; }
 
+const IRAN_TIME_ZONE = "Asia/Tehran";
+function isWarOpenInIran() {
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone: IRAN_TIME_ZONE, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date());
+  const hour = Number(parts.find(x => x.type === "hour")?.value || 0);
+  return hour >= 12;
+}
+async function syncWarSchedule() {
+  const client = await pool.connect();
+  let locked = false, changed = null;
+  try {
+    const lock = await client.query("SELECT pg_try_advisory_lock(7281942026) AS locked");
+    locked = !!lock.rows[0]?.locked;
+    if (!locked) return;
+    const next = isWarOpenInIran() ? "open" : "closed";
+    const previous = await client.query("SELECT setting_value FROM game_settings WHERE setting_key='war_schedule_state'");
+    if (!previous.rowCount) {
+      await client.query("INSERT INTO game_settings(setting_key,setting_value) VALUES('war_schedule_state',$1) ON CONFLICT(setting_key) DO NOTHING", [next]);
+    } else if (previous.rows[0].setting_value !== next) {
+      await client.query("UPDATE game_settings SET setting_value=$1 WHERE setting_key='war_schedule_state'", [next]);
+      changed = next;
+    }
+  } finally {
+    if (locked) await client.query("SELECT pg_advisory_unlock(7281942026)");
+    client.release();
+  }
+  if (changed === "open") await publishWorldEvent("🟢 ساعت جنگ در ایران به ۱۲:۰۰ رسید؛ جنگ‌ها دوباره باز شدند. امکان اعلام جنگ و آغاز حمله فعال است.", "diplomacy");
+  if (changed === "closed") await publishWorldEvent("🔴 ساعت ۰۰:۰۰ به وقت ایران رسید؛ جنگ‌ها تا ساعت ۱۲:۰۰ بسته شدند. اعلام جنگ و آغاز حمله موقتاً غیرفعال است.", "diplomacy");
+}
+
+
 async function telegramApi(method, payload) {
   if (!BOT_TOKEN) return { ok: false, description: "BOT_TOKEN is not configured" };
   const response = await fetch("https://api.telegram.org/bot" + BOT_TOKEN + "/" + method, {
@@ -680,6 +710,7 @@ app.get("/api/battles",auth,async(req,res)=>{
  res.json({ok:true,reports:q.rows});
 });
 app.post("/api/battles/launch",auth,async(req,res)=>{
+ if(!isWarOpenInIran())return res.status(403).json({ok:false,error:"جنگ‌ها از ساعت ۰۰:۰۰ تا ۱۲:۰۰ به وقت ایران بسته هستند. از ساعت ۱۲:۰۰ دوباره باز می‌شوند."});
  const attacker=String(req.user.id),target=String(req.body?.target_id||""),forces=req.body?.forces;
  if(!/^\d{5,20}$/.test(target)||target===attacker||!forces||typeof forces!=="object"||Array.isArray(forces))return res.status(400).json({ok:false,error:"هدف یا ترکیب نیروها معتبر نیست."});
  const entries=Object.entries(forces);
@@ -800,6 +831,7 @@ app.post("/api/diplomacy",auth,async(req,res)=>{
   if(action==="alliance"||action==="war"){
     const kind=action;
     if(kind==="war"){
+      if(!isWarOpenInIran())return res.status(403).json({ok:false,error:"اعلام جنگ از ساعت ۰۰:۰۰ تا ۱۲:۰۰ به وقت ایران بسته است. از ساعت ۱۲:۰۰ دوباره باز می‌شود."});
       const allied=await pool.query("SELECT 1 FROM diplomacy WHERE kind='alliance' AND status='active' AND ((from_id=$1 AND to_id=$2) OR (from_id=$2 AND to_id=$1))",[String(req.user.id),target]);
       if(allied.rowCount)return res.status(400).json({ok:false,error:"تا وقتی اتحاد فعال است، ابتدا باید آن را پایان بدهید."});
     }
@@ -1085,7 +1117,7 @@ app.use((err,req,res,next)=>{
 });
 
 const port=process.env.PORT||3000;
-initDb().then(async()=>{ await initWorldSystems(pool); const notice=await pool.query("INSERT INTO game_settings(setting_key,setting_value) VALUES($1,$2) ON CONFLICT(setting_key) DO NOTHING RETURNING setting_key",["game_update_notice_20261112_v2","sent"]); if(notice.rowCount) await publishWorldEvent("🚀 RADINWAR 3000.3 منتشر شد!\n🧬 فناوری‌های جدید، 🏙️ توسعه شهرها، 💱 بازار بازیکنان، 🛰️ اطلاعات راهبردی، 🌍 رویدادهای هفتگی و 🏆 فصل رقابت اضافه شدند.\n🔄 اگر بازی باز است، نسخه جدید به‌صورت خودکار بارگذاری می‌شود."); app.listen(port,async()=>{
+initDb().then(async()=>{ await initWorldSystems(pool); await syncWarSchedule(); setInterval(()=>syncWarSchedule().catch(e=>console.error("War schedule check failed",e)),15000); const notice=await pool.query("INSERT INTO game_settings(setting_key,setting_value) VALUES($1,$2) ON CONFLICT(setting_key) DO NOTHING RETURNING setting_key",["game_update_notice_20261112_v2","sent"]); if(notice.rowCount) await publishWorldEvent("🚀 RADINWAR 3000.3 منتشر شد!\n🧬 فناوری‌های جدید، 🏙️ توسعه شهرها، 💱 بازار بازیکنان، 🛰️ اطلاعات راهبردی، 🌍 رویدادهای هفتگی و 🏆 فصل رقابت اضافه شدند.\n🔄 اگر بازی باز است، نسخه جدید به‌صورت خودکار بارگذاری می‌شود."); app.listen(port,async()=>{
   console.log("radinwar💥 online on "+port);
   await configureTelegramBot();
 });}).catch(e=>{console.error("Database initialization failed",e);process.exit(1)});
