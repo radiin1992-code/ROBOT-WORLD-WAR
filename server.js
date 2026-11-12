@@ -62,7 +62,7 @@ async function initDb() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS players (
       telegram_id BIGINT PRIMARY KEY, username TEXT DEFAULT '', first_name TEXT DEFAULT 'Commander', chat_id BIGINT,
-      coins BIGINT NOT NULL DEFAULT 10000000, level INT NOT NULL DEFAULT 1,
+      coins BIGINT NOT NULL DEFAULT 10000, level INT NOT NULL DEFAULT 1,
       country_code TEXT UNIQUE, country_name TEXT, country_flag TEXT DEFAULT '',
       oil BIGINT NOT NULL DEFAULT 300, steel BIGINT NOT NULL DEFAULT 500,
       food BIGINT NOT NULL DEFAULT 900, energy BIGINT NOT NULL DEFAULT 400,
@@ -192,9 +192,12 @@ async function initDb() {
     CREATE INDEX IF NOT EXISTS direct_messages_pair_idx ON direct_messages(sender_id,receiver_id,id);
     CREATE INDEX IF NOT EXISTS announcements_id_idx ON announcements(id DESC);
   `);
-  await pool.query("ALTER TABLE players ALTER COLUMN coins SET DEFAULT 10000000");
+  await pool.query("CREATE TABLE IF NOT EXISTS game_settings (setting_key TEXT PRIMARY KEY, setting_value TEXT NOT NULL DEFAULT '')");
+  const economyReset=await pool.query("INSERT INTO game_settings(setting_key,setting_value) VALUES('economy_reset_20261112','done') ON CONFLICT(setting_key) DO NOTHING RETURNING setting_key");
+  if(economyReset.rowCount) await pool.query("UPDATE players SET coins=10000,shop_income=0,production_at=NOW(),updated_at=NOW()");
+  await pool.query("ALTER TABLE players ALTER COLUMN coins SET DEFAULT 10000");
   await pool.query("ALTER TABLE players ALTER COLUMN oil SET DEFAULT 0, ALTER COLUMN steel SET DEFAULT 0, ALTER COLUMN food SET DEFAULT 0, ALTER COLUMN energy SET DEFAULT 0");
-  await pool.query("UPDATE players SET coins=10000000,oil=0,steel=0,food=0,energy=0 WHERE country_code IS NULL");
+  await pool.query("UPDATE players SET oil=0,steel=0,food=0,energy=0 WHERE country_code IS NULL");
 
   const n = await pool.query("SELECT COUNT(*)::int AS n FROM world_news");
   if (!n.rows[0].n) await pool.query("INSERT INTO world_news(message) VALUES ($1),($2),($3)", ["شبکه جهانی radinwar💥 راه‌اندازی شد.", "بازار جهانی آماده معامله است.", "فرماندهان جدید می‌توانند کشور خود را انتخاب کنند."]);
@@ -235,10 +238,10 @@ app.get("/api/profile",auth,async(req,res)=>{
   p.military_power=military.rows.reduce((sum,row)=>sum+Number(row.quantity||0)*Number(UNIT_CATALOG[row.unit_type]?.power??powerByType[row.unit_type]??0),0);
   const ownedBuildings=await pool.query("SELECT building_type,level FROM national_buildings WHERE telegram_id=$1",[String(req.user.id)]);
   const buildingIncome=ownedBuildings.rows.reduce((sum,row)=>sum+Number(row.level||0)*Number(BUILDING_CATALOG[row.building_type]?.production?.coins||0),0);
-  p.income=Number(countryEconomy(p.country_code).income+Math.max(0,(p.industry-1)*75+(p.agriculture-1)*45+(p.level-1)*30)/3600+buildingIncome+Number(p.shop_income||0));p.gdp=Number(p.coins)*4;p.population=0;
+  p.income=300;p.gdp=Number(p.coins)*4;p.population=0;
   res.json({ok:true,profile:p});
 });
-app.get("/api/treasury",auth,async(req,res)=>{await applyProduction(req.user.id);const q=await pool.query("SELECT coins,country_code,industry,agriculture,level,shop_income FROM players WHERE telegram_id=$1",[String(req.user.id)]);if(!q.rowCount)return res.status(404).json({ok:false});const p=q.rows[0];const b=await pool.query("SELECT building_type,level FROM national_buildings WHERE telegram_id=$1",[String(req.user.id)]);const buildingIncome=b.rows.reduce((sum,row)=>sum+Number(row.level||0)*Number(BUILDING_CATALOG[row.building_type]?.production?.coins||0),0);const income=Number(countryEconomy(p.country_code).income+Math.max(0,(p.industry-1)*75+(p.agriculture-1)*45+(p.level-1)*30)/3600+buildingIncome+Number(p.shop_income||0));res.json({ok:true,coins:p.coins,income});});
+app.get("/api/treasury",auth,async(req,res)=>{await applyProduction(req.user.id);const q=await pool.query("SELECT coins,country_code,industry,agriculture,level,shop_income FROM players WHERE telegram_id=$1",[String(req.user.id)]);if(!q.rowCount)return res.status(404).json({ok:false});const p=q.rows[0];const b=await pool.query("SELECT building_type,level FROM national_buildings WHERE telegram_id=$1",[String(req.user.id)]);const buildingIncome=b.rows.reduce((sum,row)=>sum+Number(row.level||0)*Number(BUILDING_CATALOG[row.building_type]?.production?.coins||0),0);const income=300;res.json({ok:true,coins:p.coins,income});});
 app.get("/api/news",auth,async(_req,res)=>{const q=await pool.query("SELECT id,message,created_at FROM world_news ORDER BY id DESC LIMIT 60");res.json({ok:true,items:q.rows});});
 const mapGeoCache=localWorldGeoJSON;
 app.get("/api/map-data",(_req,res)=>res.set("Cache-Control","public, max-age=86400").json(mapGeoCache));
@@ -437,19 +440,18 @@ async function applyProduction(id){
     const seconds=Math.max(0,Math.min(86400,(Date.now()-new Date(p.rows[0].production_at).getTime())/1000));
     const hours=seconds/3600;
     if(seconds>=1){
-      const base=countryEconomy(p.rows[0].country_code); let coins=seconds*base.income,initialEnergy=Number(p.rows[0].energy),initialOil=Number(p.rows[0].oil),initialSteel=Number(p.rows[0].steel),initialFood=Number(p.rows[0].food),energy=initialEnergy+hours*base.energy,oil=initialOil+hours*base.oil,steel=initialSteel+hours*base.steel,food=initialFood+hours*base.food;
+      const base=countryEconomy(p.rows[0].country_code); let coins=seconds*5,initialEnergy=Number(p.rows[0].energy),initialOil=Number(p.rows[0].oil),initialSteel=Number(p.rows[0].steel),initialFood=Number(p.rows[0].food),energy=initialEnergy+hours*base.energy,oil=initialOil+hours*base.oil,steel=initialSteel+hours*base.steel,food=initialFood+hours*base.food;
       for(const key of ["power","solar","wind","hydro","geothermal","nuclear","tidal","biomass","wastepower","solarpark","offshorewind","battery"])energy+=hours*(levels[key]||0)*Number(BUILDING_CATALOG[key].production.energy||0);
       for(const [key,item] of Object.entries(BUILDING_CATALOG)){
         const production=item.production||{},level=levels[key]||0;
         if(!level||production.energy)continue;
         const need=Number(production.energyNeed||0),active=need>0?Math.min(level,energy/(hours*need)):level;
         if(need>0)energy=Math.max(0,energy-hours*active*need);
-        if(production.coins)coins+=seconds*active*production.coins;
         if(production.oil)oil+=hours*active*production.oil;
         if(production.steel)steel+=hours*active*production.steel;
         if(production.food)food+=hours*active*production.food;
       }
-      await client.query("UPDATE players SET coins=coins+$1::numeric+shop_income*$2::numeric,energy=energy+$3::numeric,oil=oil+$4::numeric,steel=steel+$5::numeric,food=food+$6::numeric,production_at=NOW() WHERE telegram_id=$7",[Math.floor(coins).toString(),seconds.toString(),(Math.floor(energy)-Math.floor(initialEnergy)).toString(),(Math.floor(oil)-Math.floor(initialOil)).toString(),(Math.floor(steel)-Math.floor(initialSteel)).toString(),(Math.floor(food)-Math.floor(initialFood)).toString(),String(id)]);
+      await client.query("UPDATE players SET coins=coins+$1::numeric,energy=energy+$2::numeric,oil=oil+$3::numeric,steel=steel+$4::numeric,food=food+$5::numeric,production_at=NOW() WHERE telegram_id=$6",[Math.floor(coins).toString(),(Math.floor(energy)-Math.floor(initialEnergy)).toString(),(Math.floor(oil)-Math.floor(initialOil)).toString(),(Math.floor(steel)-Math.floor(initialSteel)).toString(),(Math.floor(food)-Math.floor(initialFood)).toString(),String(id)]);
     }
     await client.query("COMMIT");
   }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
