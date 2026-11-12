@@ -220,10 +220,9 @@ function updateShopCard(card,item){
  card.querySelector("[data-total]").innerHTML='جمع خرید: <b>'+shopBigIntFormat(totalPrice)+'</b> پول';
  card.querySelector("[data-receive]").textContent='دریافت نهایی: '+shopBigIntFormat(totalAmount)+' واحد';
  card.querySelector("[data-income-total]").textContent='افزایش درآمد: +'+shopBigIntFormat(totalIncome)+' پول در ثانیه';
- const buy=card.querySelector("[data-buy]"),storageMax=9223372036854775807n;
- const withinStorage=qty<=storageMax/price&&qty<=storageMax/amount&&qty<=storageMax/income;
- buy.disabled=shopPurchasePending||!valid||qty<1n||qty>max||!withinStorage;
- buy.textContent=shopPurchasePending?"در حال خرید...":(!withinStorage?"بیش از ظرفیت":(qty>max?"پول کافی نیست":"خرید "+shopBigIntFormat(qty)+" عدد"));
+ const buy=card.querySelector("[data-buy]");
+ buy.disabled=shopPurchasePending||!valid||qty<1n||qty>max;
+ buy.textContent=shopPurchasePending?"در حال خرید...":(qty>max?"پول کافی نیست":"خرید "+shopBigIntFormat(qty)+" عدد");
 }
 async function loadShop(){
  const d=await api("shop");if(!d.ok)return;
@@ -238,8 +237,8 @@ async function loadShop(){
    if(!/^\d+$/.test(rawQuantity)){toast("تعداد خرید معتبر نیست");return}
    let quantity;try{quantity=BigInt(rawQuantity)}catch{toast("تعداد خرید معتبر نیست");return}
    let coins=0n;try{coins=BigInt(me?.coins||0)}catch{}
-   const price=BigInt(item.price),amount=BigInt(item.amount),income=BigInt(item.incomeBonus),storageMax=9223372036854775807n;
-   if(quantity<1n||quantity>coins/price||quantity>storageMax/price||quantity>storageMax/amount||quantity>storageMax/income){toast("تعداد انتخابی بیشتر از موجودی یا ظرفیت بازی است");return}
+   const price=BigInt(item.price);
+   if(quantity<1n||quantity>coins/price){toast("تعداد انتخابی بیشتر از موجودی پولته");return}
    shopPurchasePending=true;$("shopGrid").querySelectorAll(".shop-item").forEach(c=>{const it=shopItems.find(x=>x.id===c.dataset.shopId);updateShopCard(c,it)});
    const z=await api("shop/buy",{item:item.id,quantity:quantity.toString()});
    shopPurchasePending=false;
