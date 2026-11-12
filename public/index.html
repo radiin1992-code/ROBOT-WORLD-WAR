@@ -405,7 +405,7 @@ async function loadShop(){
    const rawQuantity=shopDigits(card.querySelector("[data-quantity]").value);
    if(!/^\d+$/.test(rawQuantity)){toast("تعداد خرید معتبر نیست");return}
    let quantity;try{quantity=BigInt(rawQuantity)}catch{toast("تعداد خرید معتبر نیست");return}
-   let coins=0n;try{coins=BigInt(me?.coins||0)}catch{}
+   let coins=shopBigIntValue(me?.coins||0);
    const price=BigInt(item.price);
    if(quantity<1n||quantity>coins/price){toast("تعداد انتخابی بیشتر از موجودی پولته");return}
    shopPurchasePending=true;$("shopGrid").querySelectorAll(".shop-item").forEach(c=>{const it=shopItems.find(x=>x.id===c.dataset.shopId);updateShopCard(c,it)});
