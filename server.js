@@ -321,6 +321,33 @@ app.get("/api/treasury",auth,async(req,res)=>{await applyProduction(req.user.id)
 app.get("/api/news",auth,async(_req,res)=>{const q=await pool.query("SELECT id,message,created_at FROM world_news ORDER BY id DESC LIMIT 60");res.json({ok:true,items:q.rows});});
 function pointInGeoRing(ring,lng,lat){let inside=false;for(let i=0,j=ring.length-1;i<ring.length;j=i++){const xi=ring[i][0],yi=ring[i][1],xj=ring[j][0],yj=ring[j][1];if(((yi>lat)!==(yj>lat))&&(lng<(xj-xi)*(lat-yi)/(yj-yi+1e-12)+xi))inside=!inside;}return inside}
 function pointInCountry(code,lng,lat){const f=localWorldGeoJSON.features.find(x=>x.properties?.ISO_A3===code);if(!f?.geometry)return false;const g=f.geometry,polys=g.type==="Polygon"?[g.coordinates]:g.type==="MultiPolygon"?g.coordinates:[];return polys.some(poly=>pointInGeoRing(poly[0],lng,lat)&&!poly.slice(1).some(r=>pointInGeoRing(r,lng,lat)))}
+function countryAnchor(code){
+ const f=localWorldGeoJSON.features.find(x=>x.properties?.ISO_A3===code);if(!f?.geometry)return null;
+ const g=f.geometry,polys=g.type==="Polygon"?[g.coordinates]:g.type==="MultiPolygon"?g.coordinates:[];
+ let sx=0,sy=0,n=0;
+ for(const poly of polys){const ring=poly[0]||[];const step=Math.max(1,Math.floor(ring.length/180));for(let i=0;i<ring.length;i+=step){const p=ring[i];if(Number.isFinite(p?.[0])&&Number.isFinite(p?.[1])){sx+=p[0];sy+=p[1];n++}}}
+ return n?{lng:sx/n,lat:sy/n}:null;
+}
+function countryDistanceKm(a,b){
+ const x=countryAnchor(a),y=countryAnchor(b);if(!x||!y)return 0;
+ const rad=v=>v*Math.PI/180,R=6371,dLat=rad(y.lat-x.lat),dLng=rad(y.lng-x.lng);
+ const h=Math.sin(dLat/2)**2+Math.cos(rad(x.lat))*Math.cos(rad(y.lat))*Math.sin(dLng/2)**2;
+ return Math.round(2*R*Math.asin(Math.sqrt(Math.min(1,h))));
+}
+function seasonalSectorWeather(lat,lng,now=new Date()){
+ const month=now.getUTCMonth()+1,day=Math.floor(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate())/86400000);
+ const south=lat<0,seasonMonth=south?((month+5)%12)+1:month;
+ const season=seasonMonth<=2?"زمستان":seasonMonth<=5?"بهار":seasonMonth<=8?"تابستان":"پاییز";
+ const abs=Math.abs(lat),climate=abs<23.5?"گرمسیری":abs<35?"نیمه‌گرمسیری":abs<60?"معتدل":"سردسیر";
+ const seed=Math.abs(Math.sin(lat*12.9898+lng*78.233+day*0.017)*43758.5453)%1;
+ let condition="صاف",airFactor=1,groundFactor=1,defenseFactor=1;
+ if(climate==="سردسیر"&&season==="زمستان"&&seed>.28){condition="برفی";airFactor=.92;groundFactor=.94;defenseFactor=1.02}
+ else if(climate==="گرمسیری"&&seed>.52){condition="بارانی";airFactor=.94;groundFactor=.97;defenseFactor=1.01}
+ else if(seed>.86){condition="طوفانی";airFactor=.86;groundFactor=.95;defenseFactor=1.02}
+ else if(seed>.64){condition="بارانی";airFactor=.95;groundFactor=.97}
+ return {season,climate,condition,airFactor,groundFactor,defenseFactor,model:"آب‌وهوای فصلی شبیه‌سازی‌شده، نه دادهٔ هواشناسی زنده"};
+}
+
 const mapGeoCache=localWorldGeoJSON;
 app.get("/api/map-data",(_req,res)=>res.set("Cache-Control","public, max-age=86400").json(mapGeoCache));
 app.get("/api/map-texture",async(_req,res)=>{try{if(mapTextureCache)return res.type("image/jpeg").set("Cache-Control","public,max-age=604800").send(mapTextureCache);for(const url of ["https://cdn.jsdelivr.net/npm/three-globe@2.45.0/example/img/earth-blue-marble.jpg","https://unpkg.com/three-globe@2.45.0/example/img/earth-blue-marble.jpg"]){try{const r=await fetch(url,{signal:AbortSignal.timeout(12000)});if(!r.ok)continue;const b=Buffer.from(await r.arrayBuffer());if(b.length<10000)continue;mapTextureCache=b;return res.type("image/jpeg").set("Cache-Control","public,max-age=604800").send(b)}catch{}}res.status(503).end()}catch{res.status(503).end()}});
@@ -813,6 +840,7 @@ app.post("/api/battles/launch",auth,async(req,res)=>{
   const defenderCountry=people.rows.find(p=>String(p.telegram_id)===target)?.country_code;
   if(!defenderCountry){await client.query("ROLLBACK");return res.status(404).json({ok:false,error:"کد کشور مدافع پیدا نشد."})}
   const sectorLat=Number(sectorInput.lat),sectorLng=Number(sectorInput.lng);
+  const battleWeather=seasonalSectorWeather(sectorLat,sectorLng),routeDistanceKm=countryDistanceKm(people.rows.find(p=>String(p.telegram_id)===attacker)?.country_code,defenderCountry);
   if(!pointInCountry(defenderCountry,sectorLng,sectorLat)){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"مختصات انتخابی داخل مرز کشور هدف نیست."})}
   const sectorX=Math.floor((sectorLng+180)*4),sectorY=Math.floor((sectorLat+90)*4),sectorKey=defenderCountry+":"+sectorX+":"+sectorY;
   const existingSector=await client.query("SELECT owner_id FROM territory_sectors WHERE sector_key=$1 FOR UPDATE",[sectorKey]);
@@ -846,12 +874,12 @@ app.post("/api/battles/launch",auth,async(req,res)=>{
     if(!st||qty>(am.get(type)||0)){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"موجودی یکی از یگان‌های انتخابی کافی نیست یا مدل معتبر نیست."})}
     const techBonus=st.category==="ground"?Number(attackerTech.military||0)*.06:st.category==="air"?Number(attackerTech.aviation||0)*.07:0;
     const commanderBonusForUnit=attackerAttackBonus+(st.category==="air"?attackerAirBonus:0);
-    ap+=qty*st.attack*(1+techBonus)*(1+commanderBonusForUnit);
+    ap+=qty*st.attack*(1+techBonus)*(1+commanderBonusForUnit)*(st.category==="air"?battleWeather.airFactor:battleWeather.groundFactor);
   }
   for(const [type,qty] of dm){
     if(qty<=0)continue;
     const st=stats(type);if(!st)continue;
-    dp+=qty*st.defense*(1+Number(defenderTech.defense||0)*.07)*(1+defenderDefenseBonus);
+    dp+=qty*st.defense*(1+Number(defenderTech.defense||0)*.07)*(1+defenderDefenseBonus)*battleWeather.defenseFactor;
     defending.push({type,qty});
   }
   const technologyBonuses={
@@ -864,8 +892,8 @@ app.post("/api/battles/launch",auth,async(req,res)=>{
   if(win)await client.query("INSERT INTO territory_sectors(sector_key,country_code,grid_x,grid_y,owner_id) VALUES($1,$2,$3,$4,$5) ON CONFLICT(sector_key) DO UPDATE SET owner_id=EXCLUDED.owner_id,captured_at=NOW()",[sectorKey,defenderCountry,sectorX,sectorY,attacker]);
   const arBase=Math.min(.38,Math.max(.04,(dp/total)*(win ? .30 : .58))),drBase=Math.min(.48,Math.max(.05,(ap/total)*(win ? .62 : .34)));
   const ar=Math.max(.02,arBase*(1-attackerLogistics)),dr=Math.max(.02,drBase*(1-defenderLogistics));
-  const totalCommitted=used.reduce((sum,[,qty])=>sum+Number(qty),0),baseOperationCost=Math.ceil(totalCommitted/1000);
-  const operationOilCost=Math.max(1,Math.ceil(baseOperationCost*(1-attackerLogistics))),operationEnergyCost=Math.max(0,Math.floor(baseOperationCost*(1-attackerLogistics)));
+  const totalCommitted=used.reduce((sum,[,qty])=>sum+Number(qty),0),baseOperationCost=Math.ceil(totalCommitted/1000),distanceCostFactor=1+Math.min(1.5,routeDistanceKm/6000);
+  const operationOilCost=Math.max(1,Math.ceil(baseOperationCost*distanceCostFactor*(1-attackerLogistics))),operationEnergyCost=Math.max(0,Math.ceil(baseOperationCost*distanceCostFactor*(1-attackerLogistics)));
   if(operationOilCost||operationEnergyCost){const paidOperation=await client.query("UPDATE players SET oil=oil-$1,energy=energy-$2 WHERE telegram_id=$3 AND oil>=$1 AND energy>=$2 RETURNING telegram_id",[operationOilCost,operationEnergyCost,attacker]);if(!paidOperation.rowCount){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"برای عملیات، نفت و انرژی کافی نداری. هر ۱۰۰۰ یگان اعزامی ۱ نفت و ۱ انرژی نیاز دارد؛ فرمانده لجستیک هزینه را کاهش می‌دهد."})}}
   const al={},dl={};
   const loot={coins:"0",oil:"0",steel:"0",food:"0",energy:"0"};
@@ -907,7 +935,7 @@ app.post("/api/battles/launch",auth,async(req,res)=>{
   await client.query("COMMIT");
   await publishWorldEvent("⚔️ "+summary+" قدرت مهاجم: "+Math.round(ap).toLocaleString("en-US")+" • قدرت دفاع: "+Math.round(dp).toLocaleString("en-US"),"war",{report:report.rows[0].id});
   await notifyPlayer(target,summary+" گزارش نبرد در بازی ثبت شد.","war",{report:report.rows[0].id});
-  res.json({ok:true,id:report.rows[0].id,summary,loot,attackerPower:ap,defenderPower:dp,attackerLosses:al,defenderLosses:dl,technologyBonuses,commanderBonuses:{attackerAttack:Math.round(attackerAttackBonus*100),attackerAir:Math.round(attackerAirBonus*100),defenderDefense:Math.round(defenderDefenseBonus*100),attackerLogistics:Math.round(attackerLogistics*100),defenderLogistics:Math.round(defenderLogistics*100)},operationCost:{oil:operationOilCost,energy:operationEnergyCost}});
+  res.json({ok:true,id:report.rows[0].id,summary,loot,attackerPower:ap,defenderPower:dp,attackerLosses:al,defenderLosses:dl,attackerComposition:al,defenderComposition:Object.fromEntries(defending.map(x=>[x.type,x.qty])),routeDistanceKm,weather:battleWeather,technologyBonuses,commanderBonuses:{attackerAttack:Math.round(attackerAttackBonus*100),attackerAir:Math.round(attackerAirBonus*100),defenderDefense:Math.round(defenderDefenseBonus*100),attackerLogistics:Math.round(attackerLogistics*100),defenderLogistics:Math.round(defenderLogistics*100)},operationCost:{oil:operationOilCost,energy:operationEnergyCost}});
  }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
 });
 app.get("/api/diplomacy",auth,async(req,res)=>{
