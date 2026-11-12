@@ -812,7 +812,7 @@ app.post("/api/dm/:id",auth,async(req,res)=>{
 });
 app.get("/api/shop",auth,async(req,res)=>{
   res.set("Cache-Control","no-store").json({ok:true,items:[
-    {id:"oil",name:"نفت",icon:"🛢️",amount:100,price:18000,incomeBonus:0},
+    {id:"oil",name:"نفت",icon:"🛢️",amount:100,price:1000,incomeBonus:0},
     {id:"steel",name:"فولاد",icon:"🔩",amount:100,price:14000,incomeBonus:0},
     {id:"food",name:"غذا",icon:"🌾",amount:250,price:9000,incomeBonus:0},
     {id:"energy",name:"انرژی",icon:"⚡",amount:100,price:16000,incomeBonus:0},
@@ -822,7 +822,7 @@ app.get("/api/shop",auth,async(req,res)=>{
   ]});
 });
 app.post("/api/shop/buy",auth,async(req,res)=>{
-  const catalog={oil:{price:18000,amount:100,column:"oil",incomeBonus:0},steel:{price:14000,amount:100,column:"steel",incomeBonus:0},food:{price:9000,amount:250,column:"food",incomeBonus:0},energy:{price:16000,amount:100,column:"energy",incomeBonus:0},industry:{price:120000,amount:1,column:"industry",incomeBonus:0},agriculture:{price:85000,amount:1,column:"agriculture",incomeBonus:0},technology:{price:180000,amount:1,column:"technology",incomeBonus:0}};
+  const catalog={oil:{price:1000,amount:100,column:"oil",incomeBonus:0},steel:{price:14000,amount:100,column:"steel",incomeBonus:0},food:{price:9000,amount:250,column:"food",incomeBonus:0},energy:{price:16000,amount:100,column:"energy",incomeBonus:0},industry:{price:120000,amount:1,column:"industry",incomeBonus:0},agriculture:{price:85000,amount:1,column:"agriculture",incomeBonus:0},technology:{price:180000,amount:1,column:"technology",incomeBonus:0}};
   const item=catalog[req.body?.item],rawQuantity=String(req.body?.quantity??"1");
   const quantityText=rawQuantity.replace(/[۰-۹]/g,d=>String("۰۱۲۳۴۵۶۷۸۹".indexOf(d))).replace(/[٠-٩]/g,d=>String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).replace(/[٬,\s]/g,"");
   if(!item)return res.status(400).json({ok:false,error:"کالای نامعتبر."});
