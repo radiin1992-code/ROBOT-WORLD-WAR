@@ -436,7 +436,7 @@ async function applyProduction(id){
     const seconds=Math.max(0,Math.min(86400,(Date.now()-new Date(p.rows[0].production_at).getTime())/1000));
     const hours=seconds/3600;
     if(seconds>=1){
-      const base=countryEconomy(p.rows[0].country_code); let coins=Number(p.rows[0].coins)+seconds*(base.income+Number(p.rows[0].shop_income||0)),energy=Number(p.rows[0].energy)+hours*base.energy,oil=Number(p.rows[0].oil)+hours*base.oil,steel=Number(p.rows[0].steel)+hours*base.steel,food=Number(p.rows[0].food)+hours*base.food;
+      const base=countryEconomy(p.rows[0].country_code); let coins=seconds*base.income,initialEnergy=Number(p.rows[0].energy),initialOil=Number(p.rows[0].oil),initialSteel=Number(p.rows[0].steel),initialFood=Number(p.rows[0].food),energy=initialEnergy+hours*base.energy,oil=initialOil+hours*base.oil,steel=initialSteel+hours*base.steel,food=initialFood+hours*base.food;
       for(const key of ["power","solar","wind","hydro","geothermal","nuclear","tidal","biomass","wastepower","solarpark","offshorewind","battery"])energy+=hours*(levels[key]||0)*Number(BUILDING_CATALOG[key].production.energy||0);
       for(const [key,item] of Object.entries(BUILDING_CATALOG)){
         const production=item.production||{},level=levels[key]||0;
@@ -448,7 +448,7 @@ async function applyProduction(id){
         if(production.steel)steel+=hours*active*production.steel;
         if(production.food)food+=hours*active*production.food;
       }
-      await client.query("UPDATE players SET coins=$1,energy=$2,oil=$3,steel=$4,food=$5,production_at=NOW() WHERE telegram_id=$6",[Math.floor(coins),Math.floor(energy),Math.floor(oil),Math.floor(steel),Math.floor(food),String(id)]);
+      await client.query("UPDATE players SET coins=coins+$1::numeric+shop_income*$2::numeric,energy=energy+$3::numeric,oil=oil+$4::numeric,steel=steel+$5::numeric,food=food+$6::numeric,production_at=NOW() WHERE telegram_id=$7",[Math.floor(coins).toString(),seconds.toString(),(Math.floor(energy)-Math.floor(initialEnergy)).toString(),(Math.floor(oil)-Math.floor(initialOil)).toString(),(Math.floor(steel)-Math.floor(initialSteel)).toString(),(Math.floor(food)-Math.floor(initialFood)).toString(),String(id)]);
     }
     await client.query("COMMIT");
   }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
