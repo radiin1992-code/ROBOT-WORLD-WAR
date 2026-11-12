@@ -599,13 +599,14 @@ app.post("/telegram/webhook",async(req,res)=>{
   } else if(txt.startsWith("/help")){
     await telegramApi("sendMessage",{chat_id:chat,text:"📘 راهنمای radinwar💥\n/start یا /game: ورود به بازی\nکشور: انتخاب دائمی یک کشور آزاد\nاقتصاد: خرید منابع و توسعه زیرساخت\nارتباطات: چت خصوصی و گروه‌ها\nبیانیه‌ها: انتشار پیام و تصویر\nبازار جهانی: رویدادهای داخل بازی\n/help: نمایش همین راهنما\n\nقوانین: احترام، عدم اسپم، عدم جعل خبر واقعی و رعایت انتخاب دائمی کشور.",reply_markup:{inline_keyboard:[[{text:"🌍 باز کردن Mini App",web_app:{url:MINI_APP_URL}}]]}});
   } else if(txt && !txt.startsWith("/") && String(m.from?.id)!==OWNER_ID){
-    await telegramApi("sendMessage",{chat_id:OWNER_ID,text:"📩 پیام تازه به ربات از "+(from?.first_name||"کاربر")+" (@"+(from?.username||"بدون نام کاربری")+"):\n\n"+txt,reply_markup:{inline_keyboard:[[{text:"🌍 باز کردن بازی",web_app:{url:APP_LINK("market")}}]]}});
+    await telegramApi("sendMessage",{chat_id:OWNER_ID,text:"📩 پیام تازه به ربات از "+(m.from?.first_name||"کاربر")+" (@"+(m.from?.username||"بدون نام کاربری")+"):\n\n"+txt,reply_markup:{inline_keyboard:[[{text:"🌍 باز کردن بازی",web_app:{url:APP_LINK("market")}}]]}});
     await telegramApi("sendMessage",{chat_id:chat,text:"پیامت به مرکز فرماندهی رسید. 📡"});
   } else if(txt.startsWith("/about")){
     await telegramApi("sendMessage",{chat_id:chat,text:"💥 radinwar یک بازی استراتژیک آنلاین برای انتخاب کشور، مدیریت اقتصاد، ارتباط با فرمانده‌ها و رقابت در جهان شبیه‌سازی‌شده است.",reply_markup:{inline_keyboard:[[{text:"🚀 ورود به بازی",web_app:{url:MINI_APP_URL}}]]}});
   }
   res.json({ok:true});
 });
+app.use("/api",(req,res)=>res.status(404).set("Cache-Control","no-store").json({ok:false,error:"مسیر API پیدا نشد",path:req.originalUrl}));
 app.get("*",(req,res)=>res.sendFile(process.cwd()+"/public/index.html"));
 const port=process.env.PORT||3000;
 initDb().then(()=>app.listen(port,async()=>{
