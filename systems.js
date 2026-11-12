@@ -195,7 +195,7 @@ export function registerWorldSystems(app,{pool,auth,applyProduction}) {
     const client=await pool.connect();
     try{
       await client.query("BEGIN");
-      const ready=await client.query("SELECT available_at FROM espionage_cooldowns WHERE telegram_id=$1 FOR UPDATE",[id]);
+      await client.query("INSERT INTO espionage_cooldowns(telegram_id,available_at) VALUES($1,NOW()) ON CONFLICT(telegram_id) DO NOTHING",[id]); const ready=await client.query("SELECT available_at FROM espionage_cooldowns WHERE telegram_id=$1 FOR UPDATE",[id]);
       if(ready.rowCount&&new Date(ready.rows[0].available_at)>new Date()){await client.query("ROLLBACK");return res.status(429).json({ok:false,error:"مأمور اطلاعاتی هنوز در حال آماده‌سازی است."});}
       const [attacker,targetPlayer,tech,cities]=await Promise.all([
         client.query("SELECT country_code FROM players WHERE telegram_id=$1 FOR UPDATE",[id]),
@@ -222,7 +222,7 @@ export function registerWorldSystems(app,{pool,auth,applyProduction}) {
     const rows=await pool.query(`SELECT p.telegram_id,p.first_name,p.country_name,p.country_flag,p.wins,p.level,
       COALESCE((SELECT SUM(level) FROM player_technologies t WHERE t.telegram_id=p.telegram_id),0)::int AS tech,
       COALESCE((SELECT SUM(level) FROM player_cities c WHERE c.telegram_id=p.telegram_id),0)::int AS city
-      FROM players p WHERE p.country_code IS NOT NULL ORDER BY p.wins DESC,p.level DESC LIMIT 50`);
+      FROM players p WHERE p.country_code IS NOT NULL ORDER BY (p.wins*100+p.level*25+COALESCE((SELECT SUM(level)*35 FROM player_technologies t WHERE t.telegram_id=p.telegram_id),0)+COALESCE((SELECT SUM(level)*20 FROM player_cities c WHERE c.telegram_id=p.telegram_id),0)) DESC LIMIT 50`);
     const board=rows.rows.map((x,i)=>({rank:i+1,telegram_id:String(x.telegram_id),name:x.country_name||x.first_name,flag:x.country_flag,points:scoreFrom(x),wins:Number(x.wins),is_me:String(x.telegram_id)===String(req.user.id)}));
     const mine=board.find(x=>x.is_me)||null;
     const claimed=(await pool.query("SELECT milestone FROM season_claims WHERE season_key=$1 AND telegram_id=$2",[key,String(req.user.id)])).rows.map(x=>Number(x.milestone));
