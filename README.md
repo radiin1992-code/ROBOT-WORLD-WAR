@@ -1,39 +1,56 @@
 # ROBOT WORLD WAR
 
-Global strategy Telegram Mini App. Independent of JOJO UNIVERSE and Cloudflare.
+A Telegram Mini App strategy game with a persistent world map, country ownership, economy, resource production, infrastructure, army management, diplomacy, battles, announcements, groups, private messages, and owner tools.
 
-## Hosting on Render
+## Stack
 
-This repository is configured for Render Blueprint deployment in Frankfurt with:
-- Node.js Express web service
-- PostgreSQL database
-- Automatic deploys from the `main` branch
-- Database-backed `/health` check
-- Telegram webhook registration using Render's public service URL
+- Node.js 20+
+- Express 4
+- PostgreSQL
+- Telegram Mini App authentication
+- World map data from `world-atlas`
 
-Open the Render Blueprint after `render.yaml` is committed and review the resources before applying.
+## Run
 
-## Required secret
+1. Install dependencies: `npm install`
+2. Configure the environment variables in `.env` or your hosting dashboard.
+3. Start: `npm start`
 
-Set `BOT_TOKEN` in the Render service Environment page. Never put the Telegram bot token in GitHub or in this file. The webhook is registered automatically after the token is configured and the service restarts.
+Run the source checks before starting:
 
-The app uses Render's `RENDER_EXTERNAL_URL` automatically for the Mini App URL and webhook URL.
+```bash
+npm test
+```
 
-## Important free-tier limits
+The checks validate the server JavaScript, the Mini App's inline JavaScript, static HTML IDs, CSS brace balance, and matching client/server build versions. They are syntax and consistency checks, not a substitute for end-to-end testing against a live Telegram session and PostgreSQL database.
 
-The Blueprint uses free resources to avoid starting paid services without your approval. Render free web services sleep after 15 minutes without traffic and can take about a minute to wake up. **Render free PostgreSQL expires 30 days after creation**, then has a 14-day upgrade grace period before deletion. Free databases have no backups. Do not keep important game progress in the free database beyond its expiry; upgrade or migrate it before then.
+## Required environment
 
-## Security
+- `DATABASE_URL`: PostgreSQL connection string
+- `BOT_TOKEN`: Telegram bot token
+- `TELEGRAM_WEBHOOK_SECRET`: optional webhook secret (recommended)
+- `MINI_APP_URL`: optional override for the Mini App URL
+- `PGSSL`: set to `true` only if the database provider requires SSL
 
-Telegram Mini App initData is validated server-side. Owner authorization is enforced on the server for Telegram ID `1852348620`. Secrets and database credentials must remain in Render environment settings, never in source control.
+Never commit real tokens or database credentials.
 
-## Current implemented modules
+## Deploy
 
-- World map and one-time country selection
-- Persistent player profiles and starting resources
-- Economy overview and country upgrades
-- World news feed
-- Owner-only money/resource grants
-- Telegram `/start` webhook and Mini App launch button
+The Render service uses the `main` branch, `npm install`, and `npm start`. The `/health` endpoint checks database connectivity. After a commit, verify the resulting deployment in Render before announcing that the new version is live.
 
-Diplomacy, trade contracts, route restrictions, and turn-based conflict are not yet implemented in the current application code. They must be added and tested before describing the game as feature-complete.
+## Player systems
+
+- One-time country selection and world map
+- Resource balances and passive production
+- Buildings, upgrades, and shop
+- Army catalog and recruitment
+- Diplomacy, war declarations, battle reports, and in-game victory rewards
+- World announcements and news
+- Group rooms, invitations, group management, and private messages
+- Telegram bot commands: `/start`, `/game`, `/help`, and `/about`
+
+Owner-only operations are authorized server-side for the configured owner IDs. Do not rely on client-side UI visibility for access control.
+
+## Free-tier data warning
+
+Render free PostgreSQL databases have a limited lifetime and may not include backups. Check the current Render plan and database expiry before using this as the only copy of persistent player data.
