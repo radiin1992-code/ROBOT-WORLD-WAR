@@ -39,7 +39,7 @@ if (!server.includes('["coins","energy","oil","steel","food"]') || !server.inclu
 if (!html.includes("dailyRewardBtn") || !html.includes("redeemCodeBtn") || !html.includes("ownerCreatePromoBtn")) throw new Error("Daily reward or promo-code UI is missing.");
 
 if (!server.includes("tech.industry") || !server.includes("tech.agriculture") || !server.includes("tech.materials") || !server.includes("tech.energy")) throw new Error("Economic technologies are not applied to production.");
-if (!server.includes("const coinIncomePerSecond=300+Math.max(0,Number(p.rows[0].shop_income||0));") || !server.includes("let coins=seconds*coinIncomePerSecond") || !server.includes("production_at=production_at+($7::int * INTERVAL '1 second')")) throw new Error("Base income and purchased shop income must accrue for every elapsed second.");
+if (!server.includes("const coinIncomePerSecond=300*(0.55+Math.min(5,Math.max(1,Number(countryEconomy(p.rows[0].country_code).income||3)))*0.09)+Math.max(0,Number(p.rows[0].shop_income||0));") || !server.includes("let coins=seconds*coinIncomePerSecond") || !server.includes("production_at=production_at+($7::int * INTERVAL '1 second')")) throw new Error("Base income and purchased shop income must accrue for every elapsed second.");
 
 if (!server.includes('const IRAN_TIME_ZONE = "Asia/Tehran"') || !server.includes("return hour >= 12") || !server.includes("setInterval(()=>syncWarSchedule()") || !server.includes("war_schedule_state")) throw new Error("Iran-time automatic war schedule is missing.");
 if (!server.includes("CREATE TABLE IF NOT EXISTS territory_sectors") || !server.includes("target_sector TEXT")) throw new Error("Persistent territorial sector storage is missing.");
@@ -93,4 +93,6 @@ if (!server.includes("CREATE TABLE IF NOT EXISTS player_commanders") || !server.
 if (!server.includes("attackerAttackBonus") || !server.includes("defenderDefenseBonus") || !server.includes("operationOilCost") || !server.includes("UPDATE player_commanders SET level=CASE") || !server.includes("xp=CASE WHEN level>=10 THEN 0")) throw new Error("Commander bonuses, battle costs, or XP progression are not applied.");
 if (!html.includes('id="commanderGrid"') || !html.includes('data-commander-hire') || !html.includes('data-commander-upgrade') || !html.includes('id="battleCommanderInfo"')) throw new Error("Commander academy or battle UI is missing.");
 
+if (!server.includes("WORLD_RESOURCE_PROFILES") || !server.includes("/api/world/intel") || !server.includes('id:"suez"') || !server.includes('id:"panama"')) throw new Error("Natural resource profiles or strategic waterways are missing.");
+if (!html.includes("worldIntelCountries") || !html.includes("worldWaterwayList") || !html.includes("battle-flight-track") || !html.includes("map-layer-resources-off")) throw new Error("World resource atlas or animated battle scene is missing.");
 console.log("RADINWAR checks passed: server, systems module, inline scripts, HTML IDs, CSS structure, build version.");
