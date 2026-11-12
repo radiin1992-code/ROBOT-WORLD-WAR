@@ -270,6 +270,14 @@ app.post("/api/owner/unit-catalog",auth,ownerOnly,async(req,res)=>{
   await pool.query("INSERT INTO custom_unit_catalog(unit_type,name,category,category_name,icon,image_url,quantity,coins,steel,food,energy,oil,power,created_by,game_attack,game_defense,game_capacity,game_operation_cost,game_cooldown) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)",[key,name,category,categoryNames[category],icon,imageUrl,quantity,cost.coins,cost.steel,cost.food,cost.energy,cost.oil,power,String(req.user.id),game.attack,game.defense,game.capacity,game.operationCost,game.cooldown]);
   res.json({ok:true,type:key});
 });
+app.post("/api/owner/unit-catalog/:type/image",auth,ownerOnly,async(req,res)=>{
+  const type=String(req.params.type||""),imageUrl=String(req.body?.imageUrl||"").trim();
+  const validImage=/^https:\/\//i.test(imageUrl)||/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(imageUrl);
+  if(!/^(?:catalog_[a-z0-9_]+|custom_[a-f0-9]{16})$/.test(type)||!validImage||imageUrl.length>6000000)return res.status(400).json({ok:false,error:"تصویر یا شناسه مدل معتبر نیست."});
+  const q=await pool.query("UPDATE custom_unit_catalog SET image_url=$1 WHERE unit_type=$2 RETURNING name",[imageUrl,type]);
+  if(!q.rowCount)return res.status(404).json({ok:false,error:"مدل پیدا نشد."});
+  res.json({ok:true,name:q.rows[0].name});
+});
 app.post("/api/owner/unit-catalog/:type/delete",auth,ownerOnly,async(req,res)=>{
   const type=String(req.params.type||"");
   if(!/^custom_[a-f0-9]{16}$/.test(type))return res.status(400).json({ok:false,error:"فقط مدل‌های سفارشی قابل حذف هستند."});
