@@ -206,8 +206,9 @@ app.get("/api/profile",auth,async(req,res)=>{
   await applyProduction(req.user.id);
   const q=await pool.query("SELECT * FROM players WHERE telegram_id=$1",[String(req.user.id)]);
   const p=q.rows[0];
-  const military=await pool.query("SELECT unit_type,quantity FROM military_units WHERE telegram_id=$1",[String(req.user.id)]);
-  p.military_power=military.rows.reduce((sum,row)=>sum+Number(row.quantity||0)*Number(UNIT_CATALOG[row.unit_type]?.power||0),0);
+  const [military,customPowers]=await Promise.all([pool.query("SELECT unit_type,quantity FROM military_units WHERE telegram_id=$1",[String(req.user.id)]),pool.query("SELECT unit_type,power FROM custom_unit_catalog")]);
+  const powerByType=Object.fromEntries(customPowers.rows.map(x=>[x.unit_type,Number(x.power)]));
+  p.military_power=military.rows.reduce((sum,row)=>sum+Number(row.quantity||0)*Number(UNIT_CATALOG[row.unit_type]?.power??powerByType[row.unit_type]??0),0);
   const ownedBuildings=await pool.query("SELECT building_type,level FROM national_buildings WHERE telegram_id=$1",[String(req.user.id)]);
   const buildingIncome=ownedBuildings.rows.reduce((sum,row)=>sum+Number(row.level||0)*Number(BUILDING_CATALOG[row.building_type]?.production?.coins||0),0);
   p.income=Number(countryEconomy(p.country_code).income+Math.max(0,(p.industry-1)*75+(p.agriculture-1)*45+(p.level-1)*30)/3600+buildingIncome+Number(p.shop_income||0));p.gdp=Number(p.coins)*4;p.population=0;
