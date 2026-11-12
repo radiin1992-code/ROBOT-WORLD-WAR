@@ -317,6 +317,8 @@ app.get("/api/profile",auth,async(req,res)=>{
 });
 app.get("/api/treasury",auth,async(req,res)=>{await applyProduction(req.user.id);const q=await pool.query("SELECT coins,country_code,industry,agriculture,level,shop_income FROM players WHERE telegram_id=$1",[String(req.user.id)]);if(!q.rowCount)return res.status(404).json({ok:false});const p=q.rows[0];const income=300;res.json({ok:true,coins:p.coins,income});});
 app.get("/api/news",auth,async(_req,res)=>{const q=await pool.query("SELECT id,message,created_at FROM world_news ORDER BY id DESC LIMIT 60");res.json({ok:true,items:q.rows});});
+function pointInGeoRing(ring,lng,lat){let inside=false;for(let i=0,j=ring.length-1;i<ring.length;j=i++){const xi=ring[i][0],yi=ring[i][1],xj=ring[j][0],yj=ring[j][1];if(((yi>lat)!==(yj>lat))&&(lng<(xj-xi)*(lat-yi)/(yj-yi+1e-12)+xi))inside=!inside;}return inside}
+function pointInCountry(code,lng,lat){const f=localWorldGeoJSON.features.find(x=>x.properties?.ISO_A3===code);if(!f?.geometry)return false;const g=f.geometry,polys=g.type==="Polygon"?[g.coordinates]:g.type==="MultiPolygon"?g.coordinates:[];return polys.some(poly=>pointInGeoRing(poly[0],lng,lat)&&!poly.slice(1).some(r=>pointInGeoRing(r,lng,lat)))}
 const mapGeoCache=localWorldGeoJSON;
 app.get("/api/map-data",(_req,res)=>res.set("Cache-Control","public, max-age=86400").json(mapGeoCache));
 app.get("/api/map-texture",async(_req,res)=>{try{if(mapTextureCache)return res.type("image/jpeg").set("Cache-Control","public,max-age=604800").send(mapTextureCache);for(const url of ["https://cdn.jsdelivr.net/npm/three-globe@2.45.0/example/img/earth-blue-marble.jpg","https://unpkg.com/three-globe@2.45.0/example/img/earth-blue-marble.jpg"]){try{const r=await fetch(url,{signal:AbortSignal.timeout(12000)});if(!r.ok)continue;const b=Buffer.from(await r.arrayBuffer());if(b.length<10000)continue;mapTextureCache=b;return res.type("image/jpeg").set("Cache-Control","public,max-age=604800").send(b)}catch{}}res.status(503).end()}catch{res.status(503).end()}});
@@ -728,6 +730,7 @@ app.post("/api/battles/launch",auth,async(req,res)=>{
   if(!sectorInput||!Number.isFinite(Number(sectorInput.lat))||!Number.isFinite(Number(sectorInput.lng))||Number(sectorInput.lat)<-85||Number(sectorInput.lat)>85||Number(sectorInput.lng)<-180||Number(sectorInput.lng)>180){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"ابتدا یک منطقه معتبر از داخل نقشه انتخاب کن."})}
   const defenderCountry=people.rows.find(p=>String(p.telegram_id)===target)?.country_code;
   if(!defenderCountry){await client.query("ROLLBACK");return res.status(404).json({ok:false,error:"کد کشور مدافع پیدا نشد."})}
+  if(!pointInCountry(defenderCountry,sectorLng,sectorLat)){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"مختصات انتخابی داخل مرز کشور هدف نیست."})}
   const sectorLat=Number(sectorInput.lat),sectorLng=Number(sectorInput.lng),sectorX=Math.floor((sectorLng+180)/8),sectorY=Math.floor((sectorLat+90)/8),sectorKey=defenderCountry+":"+sectorX+":"+sectorY;
   const existingSector=await client.query("SELECT owner_id FROM territory_sectors WHERE sector_key=$1 FOR UPDATE",[sectorKey]);
   if(existingSector.rowCount&&String(existingSector.rows[0].owner_id)===attacker){await client.query("ROLLBACK");return res.status(409).json({ok:false,error:"این منطقه از قبل تحت کنترل کشور توست."})}
