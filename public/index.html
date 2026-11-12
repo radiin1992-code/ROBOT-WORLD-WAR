@@ -60,7 +60,7 @@ button,.panel,.item,.stat,.post,.view-banner{transition:transform .16s ease,bord
 <section id="lobby" class="hide">
  <div class="command-row"><div class="command-icons"><div class="round-icon">⚙</div><div class="round-icon">◎</div><div class="round-icon">♛</div></div><div class="command-icons"><div class="round-icon">🔔</div><div class="round-icon">🏆</div><div class="rank-medal">♛</div></div></div>
  <section id="overview" class="view active">
-  <div class="hero-country" id="countryHero"><div class="hero-content"><div class="hero-top"><span class="world-pill">🌐 WORLD COMMAND</span><span class="country-heading" id="welcome">کشور فرمانده</span></div><div class="glass-stats"><div class="balance-label">🪙 موجودی خزانه</div><div class="balance-value" id="coins">$10,000,000</div><div class="income-line">درآمد هر ثانیه: <b id="income">0</b></div><div class="hero-divider"></div><div class="hero-mini-stats"><div><small>⚔️ قدرت نظامی</small><b id="armyPower">0</b></div><div><small>⚡ انرژی</small><b class="good" id="energyValue">0</b></div></div><div class="hero-divider"></div><div class="hero-foot"><span id="countryName">کشور انتخابی</span><span>⭐ سطح <b id="level">1</b></span></div></div></div></div>
+  <div class="hero-country" id="countryHero"><div class="hero-content"><div class="hero-top"><span class="world-pill">🌐 WORLD COMMAND</span><span class="country-heading" id="welcome">کشور فرمانده</span></div><div class="glass-stats"><div class="balance-label">🪙 موجودی خزانه</div><div class="balance-value" id="coins">$10,000,000</div><div class="income-line">درآمد هر دقیقه: <b id="income">0</b></div><div class="hero-divider"></div><div class="hero-mini-stats"><div><small>⚔️ قدرت نظامی</small><b id="armyPower">0</b></div><div><small>⚡ انرژی</small><b class="good" id="energyValue">0</b></div></div><div class="hero-divider"></div><div class="hero-foot"><span id="countryName">کشور انتخابی</span><span>⭐ سطح <b id="level">1</b></span></div></div></div></div>
   <div class="grid">
    <button class="action-card army" data-view="army"><b>ارتش</b><span class="card-icon">🛡️</span></button>
    <button class="action-card war" data-view="war"><b>جنگ</b><span class="card-icon">⚔️</span></button>
@@ -219,7 +219,7 @@ function updateShopCard(card,item){
  card.querySelector("[data-max]").disabled=max<1n||shopPurchasePending;
  card.querySelector("[data-total]").innerHTML='جمع خرید: <b>'+shopBigIntFormat(totalPrice)+'</b> پول';
  card.querySelector("[data-receive]").textContent='دریافت نهایی: '+shopBigIntFormat(totalAmount)+' واحد';
- card.querySelector("[data-income-total]").textContent='افزایش درآمد: +'+shopBigIntFormat(totalIncome)+' پول در ثانیه';
+ card.querySelector("[data-income-total]").textContent='درآمد مستقیم: +'+shopBigIntFormat(totalIncome)+' پول در ثانیه';
  const buy=card.querySelector("[data-buy]");
  buy.disabled=shopPurchasePending||!valid||qty<1n||qty>max;
  buy.textContent=shopPurchasePending?"در حال خرید...":(qty>max?"پول کافی نیست":"خرید "+shopBigIntFormat(qty)+" عدد");
@@ -227,7 +227,7 @@ function updateShopCard(card,item){
 async function loadShop(){
  const d=await api("shop");if(!d.ok)return;
  shopItems=d.items||[];
- $("shopGrid").innerHTML=shopItems.map(x=>'<div class="item shop-item" data-shop-id="'+x.id+'"><span class="icon">'+x.icon+'</span><b>'+x.name+'</b><small>مقدار هر عدد: '+x.amount.toLocaleString("en-US")+' واحد</small><small class="price">قیمت هر عدد: '+x.price.toLocaleString("en-US")+' پول</small><small class="cost">درآمد هر عدد: +'+Number(x.incomeBonus||0).toLocaleString("en-US")+' پول در ثانیه</small><div class="shop-quantity-row"><label>تعداد خرید</label><input class="field" type="text" inputmode="numeric" autocomplete="off" value="1" data-quantity><button class="btn shop-max" type="button" data-max>MAX</button></div><small data-receive>دریافت نهایی: '+x.amount+' واحد</small><small data-total>جمع خرید: '+x.price.toLocaleString("en-US")+' پول</small><small class="cost" data-income-total>افزایش درآمد: +'+Number(x.incomeBonus||0).toLocaleString("en-US")+' پول در ثانیه</small><button class="btn primary" data-buy>خرید ۱ عدد</button></div>').join("");
+ $("shopGrid").innerHTML=shopItems.map(x=>'<div class="item shop-item" data-shop-id="'+x.id+'"><span class="icon">'+x.icon+'</span><b>'+x.name+'</b><small>مقدار هر عدد: '+x.amount.toLocaleString("en-US")+' واحد</small><small class="price">قیمت هر عدد: '+x.price.toLocaleString("en-US")+' پول</small><small class="cost">درآمد مستقیم هر عدد: +'+Number(x.incomeBonus||0).toLocaleString("en-US")+' پول در ثانیه</small><div class="shop-quantity-row"><label>تعداد خرید</label><input class="field" type="text" inputmode="numeric" autocomplete="off" value="1" data-quantity><button class="btn shop-max" type="button" data-max>MAX</button></div><small data-receive>دریافت نهایی: '+x.amount+' واحد</small><small data-total>جمع خرید: '+x.price.toLocaleString("en-US")+' پول</small><small class="cost" data-income-total>افزایش درآمد: +'+Number(x.incomeBonus||0).toLocaleString("en-US")+' پول در ثانیه</small><button class="btn primary" data-buy>خرید ۱ عدد</button></div>').join("");
  $("shopGrid").querySelectorAll(".shop-item").forEach(card=>{
   const item=shopItems.find(x=>x.id===card.dataset.shopId);
   card.querySelector("[data-quantity]").addEventListener("input",()=>updateShopCard(card,item));
@@ -242,7 +242,7 @@ async function loadShop(){
    shopPurchasePending=true;$("shopGrid").querySelectorAll(".shop-item").forEach(c=>{const it=shopItems.find(x=>x.id===c.dataset.shopId);updateShopCard(c,it)});
    const z=await api("shop/buy",{item:item.id,quantity:quantity.toString()});
    shopPurchasePending=false;
-   if(z.ok){toast("خرید "+shopBigIntFormat(quantity)+" عدد انجام شد؛ درآمدت افزایش یافت");await loadProfile()}
+   if(z.ok){toast("خرید "+shopBigIntFormat(quantity)+" عدد با موفقیت انجام شد");await loadProfile()}
    else {toast(z.error||"خرید انجام نشد");$("shopGrid").querySelectorAll(".shop-item").forEach(c=>{const it=shopItems.find(x=>x.id===c.dataset.shopId);updateShopCard(c,it)})}
   };
   updateShopCard(card,item);
