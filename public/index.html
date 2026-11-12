@@ -84,12 +84,15 @@ button,.panel,.item,.stat,.post,.view-banner{transition:transform .16s ease,bord
     <b style="color:#f4d58a">➕ افزودن مدل جدید به کاتالوگ ارتش</b>
     <p class="sub">مدل‌های خیالی بازی را با تصویر و قیمت دلخواه ثبت کن. عکس را از گالری انتخاب کن.</p>
     <input id="ownerUnitName" class="field" maxlength="60" placeholder="نام مدل، مثلا جنگنده آذرخش">
-    <div class="row"><select id="ownerUnitCategory" class="field"><option value="ground">نیروی زمینی</option><option value="air">یگان هوایی</option><option value="naval">ناوگان دریایی</option><option value="support">پشتیبانی</option></select><input id="ownerUnitIcon" class="field" value="✈️" placeholder="ایموجی"></div>
+    <div class="row"><select id="ownerUnitCategory" class="field"><option value="air">نیروی هوایی</option><option value="ground">نیروی زمینی</option><option value="naval">ناوگان دریایی</option><option value="defense">پدافند و دفاع</option><option value="support">پشتیبانی و شناسایی</option></select><input id="ownerUnitIcon" class="field" value="✈️" placeholder="ایموجی"></div>
     <input id="ownerUnitImage" class="field" type="file" accept="image/png,image/jpeg,image/webp">
     <div class="row"><input id="ownerUnitQuantity" class="field" type="number" min="1" value="1" placeholder="تعداد در هر بسته"><input id="ownerUnitPower" class="field" type="number" min="1" value="100" placeholder="امتیاز بازی"></div>
     <div class="row"><input id="ownerUnitCoins" class="field" type="number" min="0" value="1000000" placeholder="قیمت پول"><input id="ownerUnitSteel" class="field" type="number" min="0" value="50" placeholder="فولاد"></div>
     <div class="row"><input id="ownerUnitFood" class="field" type="number" min="0" value="20" placeholder="غذا"><input id="ownerUnitEnergy" class="field" type="number" min="0" value="30" placeholder="برق"></div>
     <input id="ownerUnitOil" class="field" type="number" min="0" value="40" placeholder="نفت">
+    <div class="row"><input id="ownerUnitAttack" class="field" type="number" min="0" value="100" placeholder="قدرت حمله بازی"><input id="ownerUnitDefense" class="field" type="number" min="0" value="55" placeholder="قدرت دفاع بازی"></div>
+    <div class="row"><input id="ownerUnitCapacity" class="field" type="number" min="0" value="10" placeholder="ظرفیت بازی"><input id="ownerUnitOpCost" class="field" type="number" min="0" value="2" placeholder="هزینه عملیات"></div>
+    <input id="ownerUnitCooldown" class="field" type="number" min="0" value="2" placeholder="بازیابی به نوبت">
     <button id="ownerAddUnitBtn" class="btn primary" style="width:100%">ثبت مدل در فروشگاه ارتش</button>
    </div>
   </section>
@@ -254,7 +257,7 @@ function renderArmyCatalog(d){
  $("armyUnits").innerHTML=visible.map(([key,x])=>{
   const cost=x.cost||{},img=x.imageUrl?'<img src="'+esc(x.imageUrl)+'" alt="" style="width:100%;height:112px;object-fit:cover;border-radius:11px;border:1px solid #ffffff24">':'<span class="game-icon">'+esc(x.icon||"🧩")+'</span>';
   const removeButton=OWNER_IDS.has(String(me?.telegram_id))&&key.startsWith("custom_")?'<button class="btn" data-delete-unit="'+key+'" style="width:100%;margin-top:6px;color:#ff8c8c">حذف مدل</button>':"";
-  return '<article class="game-card">'+img+'<b>'+esc(x.name)+'</b><small>'+esc(x.categoryName||"سامانه پایه")+'</small><small>موجودی: '+fmt(d.units[key])+' عدد</small><small>هزینه هر بسته: '+fmt(cost.coins)+' پول • '+fmt(cost.steel)+' فولاد • '+fmt(cost.food)+' غذا • '+fmt(cost.energy)+' برق • '+fmt(cost.oil)+' نفت</small><small class="cost">امتیاز توان بازی: '+fmt(x.power)+'</small><div class="row"><input class="field" type="number" min="1" max="1000000" step="1" value="1" inputmode="numeric" data-batches="'+key+'" style="min-width:0;width:100px"><button class="btn" type="button" data-max="'+key+'" style="flex:0 0 auto">MAX</button></div><small data-total="'+key+'">هزینه کل: '+fmt(cost.coins)+' پول</small><button class="btn primary" data-recruit="'+key+'">افزودن به کشور</button>'+removeButton+'</article>';
+  return '<article class="game-card">'+img+'<b>'+esc(x.name)+'</b><small>'+esc(x.categoryName||"سامانه پایه")+'</small><small>موجودی: '+fmt(d.units[key])+' عدد</small><small>هزینه هر بسته: '+fmt(cost.coins)+' پول • '+fmt(cost.steel)+' فولاد • '+fmt(cost.food)+' غذا • '+fmt(cost.energy)+' برق • '+fmt(cost.oil)+' نفت</small><small class="cost">امتیاز توان بازی: '+fmt(x.power)+'</small><small>قدرت حمله: '+fmt(x.gameAttack??x.power)+' • دفاع: '+fmt(x.gameDefense??0)+'</small><small>ظرفیت: '+fmt(x.gameCapacity??0)+' • هزینه عملیات: '+fmt(x.gameOperationCost??0)+' • بازیابی: '+fmt(x.gameCooldown??0)+' نوبت</small><div class="row"><input class="field" type="number" min="1" max="1000000" step="1" value="1" inputmode="numeric" data-batches="'+key+'" style="min-width:0;width:100px"><button class="btn" type="button" data-max="'+key+'" style="flex:0 0 auto">MAX</button></div><small data-total="'+key+'">هزینه کل: '+fmt(cost.coins)+' پول</small><button class="btn primary" data-recruit="'+key+'">افزودن به کشور</button>'+removeButton+'</article>';
  }).join("")+(visible.length<filtered.length?'<button class="btn army-more" id="armyMore">نمایش مدل‌های بیشتر ('+(filtered.length-visible.length)+')</button>':"")||'<div class="panel">مدلی با این جست‌وجو پیدا نشد</div>';
  $("armyUnits").querySelectorAll("[data-batches]").forEach(input=>{
   const key=input.dataset.batches,x=catalog[key],cost=x.cost||{};
@@ -348,7 +351,7 @@ $('ownerResourceBtn')?.addEventListener('click',async()=>{const targetId=$('owne
   try{
    const bitmap=await createImageBitmap(file),scale=Math.min(1,1000/Math.max(bitmap.width,bitmap.height)),canvas=document.createElement("canvas");canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));canvas.getContext("2d").drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close?.();const imageUrl=canvas.toDataURL("image/jpeg",0.78);
    const num=id=>Number($(id).value);
-   const payload={name:$('ownerUnitName').value.trim(),category:$('ownerUnitCategory').value,icon:$('ownerUnitIcon').value,imageUrl,quantity:num('ownerUnitQuantity'),power:num('ownerUnitPower'),coins:num('ownerUnitCoins'),steel:num('ownerUnitSteel'),food:num('ownerUnitFood'),energy:num('ownerUnitEnergy'),oil:num('ownerUnitOil')};
+   const payload={name:$('ownerUnitName').value.trim(),category:$('ownerUnitCategory').value,icon:$('ownerUnitIcon').value,imageUrl,quantity:num('ownerUnitQuantity'),power:num('ownerUnitPower'),coins:num('ownerUnitCoins'),steel:num('ownerUnitSteel'),food:num('ownerUnitFood'),energy:num('ownerUnitEnergy'),oil:num('ownerUnitOil'),gameAttack:num('ownerUnitAttack'),gameDefense:num('ownerUnitDefense'),gameCapacity:num('ownerUnitCapacity'),gameOperationCost:num('ownerUnitOpCost'),gameCooldown:num('ownerUnitCooldown')};
    const d=await api('owner/unit-catalog',payload);
    if(d.ok){toast('مدل جدید به کاتالوگ اضافه شد');$('ownerUnitName').value='';$('ownerUnitImage').value='';await loadArmy()}
    else toast(d.error||'ثبت مدل ناموفق بود');
@@ -357,7 +360,7 @@ $('ownerResourceBtn')?.addEventListener('click',async()=>{const targetId=$('owne
 
 function switchView(name){document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('active',x.dataset.view===name));document.querySelectorAll('.bottom-nav button').forEach(x=>x.classList.toggle('active',x.dataset.view===name));document.querySelectorAll('.view').forEach(x=>x.classList.toggle('active',x.id===name));if(window.radinwarGlobe){if(name==='map')window.radinwarGlobe.resumeAnimation?.();else window.radinwarGlobe.pauseAnimation?.()}if(name==='map'){loadGeo().then(()=>drawGlobe());}if(name==='army'||name==='economy')loadArmy();if(name==='war'||name==='diplomacy')loadDiplomacy();if(name==='market')loadNews();if(name==='announcements')loadAnnouncements();if(name==='groups'){loadGroups();loadGroupInvitations();}if(name==='private')loadPlayers();window.scrollTo({top:0,behavior:'smooth'})}document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>switchView(b.dataset.view));
 const originalLoadPlayers=loadPlayers;loadPlayers=async()=>{await originalLoadPlayers();fillMemberSelect()};
-const CLIENT_BUILD_VERSION="rw-20261112-03";let versionCheckBusy=false;
+const CLIENT_BUILD_VERSION="rw-20261112-04";let versionCheckBusy=false;
 async function checkServerVersion(){
  try{
   const r=await fetch('/api/version',{cache:'no-store',headers:{'x-telegram-init-data':INIT_DATA}});
