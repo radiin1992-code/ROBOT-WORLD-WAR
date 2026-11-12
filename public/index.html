@@ -100,6 +100,63 @@ main{perspective:1200px}
 @media(max-width:600px){body{background-attachment:scroll}.panel,.game-card,.item,.post,.stat,.resource-chip,.news-item{box-shadow:0 10px 23px #0005,inset 0 1px #ffffff12}.action-card{box-shadow:0 12px 25px #0008,inset 0 1px #ffffff28}.glass-stats{transform:none}.action-card:before{filter:saturate(1.12)}}
 @media(prefers-reduced-motion:reduce){body:before,body:after,.orb,.hero-country:before,.panel:before,.game-card:before,.item:before,.post:before,.stat:before,.resource-chip:before,.news-item:before{animation:none!important}.action-card,.action-card:before,.action-card .card-icon{transition:none!important}}
 
+
+/* RADINWAR 3000: full-interface visual language */
+:root{--aqua:#45f3ed;--electric:#68a5ff;--purple:#b18cff;--pink:#ff83c8;--lime:#9dff9b;--amber:#ffd36e;--accent:var(--aqua)}
+html{scroll-behavior:smooth}
+body{background-color:#050914;background-image:linear-gradient(transparent 95%,#7bdcff08 96%),linear-gradient(90deg,transparent 95%,#7bdcff08 96%),radial-gradient(ellipse at 12% 8%,#0b6e8d38,transparent 34%),radial-gradient(ellipse at 88% 20%,#6739a638,transparent 32%),radial-gradient(ellipse at 50% 100%,#1c4c7540,transparent 48%),linear-gradient(145deg,#050813,#091326 48%,#090b1a);background-size:34px 34px,34px 34px,auto,auto,auto,auto;background-attachment:fixed}
+main{isolation:isolate}
+.view.active{animation:worldEnter .48s cubic-bezier(.16,1,.3,1) both}
+.view.active h3{color:#f2f7ff;text-shadow:0 0 18px #66eaff35}
+.view.active h3:before{content:"✦";color:var(--aqua);margin-left:8px;text-shadow:0 0 12px currentColor}
+.panel,.game-card,.item,.post,.stat,.resource-chip,.news-item,.playerrow,.grouprow,.country-rules,.battle-map-card,.action-card,.unit-model{transition:transform .32s cubic-bezier(.2,.8,.2,1),border-color .3s,box-shadow .3s,filter .3s}
+.panel{border-color:#5ba9d866;background:linear-gradient(145deg,#172c49ee,#0b1425f5 65%,#101b32f2);box-shadow:0 18px 42px #0008,0 0 0 1px #91dfff0a,inset 0 1px #fff2,inset 0 -18px 30px #02071366}
+.panel:after,.game-card:after,.item:after,.post:after,.stat:after,.news-item:after,.battle-map-card:after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;background:radial-gradient(ellipse at 0 0,#75edff14,transparent 48%);opacity:.8}
+.stat{background:linear-gradient(145deg,#163b59,#10172c 70%,#251b43);border-color:#70d8f277}
+.stat:nth-child(2){background:linear-gradient(145deg,#3c2b60,#17172f 75%);border-color:#bd91ff77}
+.stat:nth-child(3){background:linear-gradient(145deg,#174b49,#101e2b 75%);border-color:#72f1c077}
+.stat:nth-child(4){background:linear-gradient(145deg,#594126,#211a25 75%);border-color:#ffd27a77}
+.stat b,.balance-value{filter:drop-shadow(0 0 10px #8bdfff55)}
+.grid>.item:nth-child(4n+1){--tile:#50e8ef;background:linear-gradient(145deg,#153b50,#0b1728 76%);border-color:#50e8ef66}
+.grid>.item:nth-child(4n+2){--tile:#b18cff;background:linear-gradient(145deg,#33264f,#10172a 76%);border-color:#b18cff66}
+.grid>.item:nth-child(4n+3){--tile:#ff91c9;background:linear-gradient(145deg,#4a2946,#171426 76%);border-color:#ff91c966}
+.grid>.item:nth-child(4n){--tile:#a5ed9b;background:linear-gradient(145deg,#214533,#101c28 76%);border-color:#a5ed9b66}
+.item .icon{display:inline-grid;place-items:center;min-width:43px;min-height:43px;border-radius:14px;background:color-mix(in srgb,var(--tile,#70eaff) 17%,transparent);border:1px solid color-mix(in srgb,var(--tile,#70eaff) 52%,transparent);filter:drop-shadow(0 0 10px color-mix(in srgb,var(--tile,#70eaff) 40%,transparent));transform:translateZ(16px);animation:iconHover 4.5s ease-in-out infinite}
+.item b{color:#f5f8ff}
+.item .price,.item .cost{color:var(--amber)!important}
+.tabs button,.unit-category-tabs button{position:relative;overflow:hidden;transition:transform .2s,background .3s,border-color .3s,box-shadow .3s}
+.tabs button.active,.unit-category-tabs button.active{background:linear-gradient(125deg,#3ce6e0,#668dff 52%,#a47aff);color:#061221;border-color:#c4ffff;box-shadow:0 0 22px #58dff755,0 5px 0 #263e76,inset 0 1px #fff}
+.tabs button:active,.unit-category-tabs button:active{transform:translateY(2px) scale(.97)}
+.btn:not(:disabled):hover{filter:brightness(1.18) saturate(1.25)}
+.btn.danger{background:linear-gradient(135deg,#ff718b,#a93258);border-color:#ffb1bf;color:#fff;box-shadow:0 5px 0 #6c1e3b,0 9px 18px #ff547533}
+.btn:not(.primary):not(.danger){background:linear-gradient(130deg,#245d78,#26376c 55%,#48346f);border-color:#79dfff99}
+.round-icon{background:linear-gradient(145deg,#24506a,#28264e);border-color:#8aeaff99;box-shadow:0 7px 0 #101b35,0 12px 25px #0008,inset 0 2px #fff4}
+.bottom-nav{border:1px solid #78dfff88;background:linear-gradient(115deg,#101b30f5,#202448f2,#101b30f5);box-shadow:0 0 35px #4e9bff25,0 16px 42px #000c,inset 0 1px #fff3}
+.bottom-nav button.active{color:#fff;text-shadow:0 0 12px #67eaff}
+.bottom-nav button.active span{background:linear-gradient(145deg,#4cece2,#788eff 60%,#bd82ff);color:#071321;box-shadow:0 5px 0 #293c79,0 0 24px #66dcff77}
+.resource-chip{background:linear-gradient(135deg,#173a50,#171c3c 60%,#38264d);border-color:#70dfff77}
+.resource-chip:nth-child(3n){background:linear-gradient(135deg,#3d2b50,#171a35);border-color:#bd91ff77}
+.resource-chip:nth-child(3n+1){background:linear-gradient(135deg,#17463f,#111d32);border-color:#78f0bd77}
+.country,.playerrow,.grouprow{background:linear-gradient(145deg,#183451,#11192d 70%,#242043);border-color:#6fcdf277;box-shadow:0 8px 0 #060d1b,0 15px 25px #0006,inset 0 1px #fff2}
+.country:nth-child(3n+2){border-color:#bb91ff88;background:linear-gradient(145deg,#33284f,#11192d 75%)}
+.country:nth-child(3n){border-color:#72eac588;background:linear-gradient(145deg,#19453f,#10192b 75%)}
+.mapwrap,.globe-shell,.battle-map-card{background:radial-gradient(ellipse at 50% 40%,#173d61,#0a1024 70%,#050914);border:1px solid #73eaff99;box-shadow:0 0 0 1px #8deaff16,0 22px 48px #000b,inset 0 0 45px #51cfff18}
+.battle-map .territory{filter:drop-shadow(0 2px 2px #0008);transition:filter .25s,fill .25s}
+.battle-map .territory.mine{fill:#eecb68;filter:drop-shadow(0 0 5px #ffdc78aa)}
+.battle-map .territory.war{fill:#ff526d;filter:drop-shadow(0 0 8px #ff526dcc)}
+.field,.search,select,textarea{border-color:#5d80ad;background:linear-gradient(145deg,#081526,#142541);box-shadow:inset 0 3px 9px #0008,0 4px 12px #0003}
+input,textarea,select{accent-color:#58e8e5}
+.post,.news-item{border-color:#6a9fcb88;background:linear-gradient(145deg,#172d48,#0b1425 78%)}
+.toast{background:linear-gradient(120deg,#e5ffff,#d5dfff 55%,#f2d9ff);color:#081321;border:1px solid #fff;box-shadow:0 0 28px #70dfff66,0 14px 35px #0009}
+#bootScreen{background:radial-gradient(ellipse at 50% 35%,#164b70 0,#25194c 34%,#0b1423 65%,#050812 100%)}
+.boot-card{border-color:#7ceaff;background:linear-gradient(145deg,#193b59,#1c1a42 55%,#0a1426);box-shadow:0 0 45px #52dfff33,0 25px 65px #000b,inset 0 1px #fff4}
+.boot-title{color:#a9f8ff;text-shadow:0 0 20px #60eaff77}
+@keyframes worldEnter{from{opacity:0;transform:translateY(12px) scale(.992);filter:blur(3px)}to{opacity:1;transform:translateY(0) scale(1);filter:blur(0)}}
+@keyframes iconHover{0%,100%{transform:translateY(0) translateZ(16px) rotate(-2deg)}50%{transform:translateY(-3px) translateZ(20px) rotate(2deg)}}
+@media(hover:hover) and (pointer:fine){.panel:hover,.stat:hover,.post:hover,.playerrow:hover,.grouprow:hover{transform:translateY(-3px) rotateX(1deg);border-color:#8deeff;box-shadow:0 22px 42px #0009,0 0 22px #5ddfff20,inset 0 1px #fff3}.country:hover{transform:translateY(-3px) scale(1.015);filter:brightness(1.16)}}
+@media(max-width:600px){body{background-attachment:scroll}.view.active{animation:worldEnter .28s ease-out both}.item .icon{animation-duration:6s}.panel,.item,.stat,.post,.country,.playerrow,.grouprow{box-shadow:0 8px 20px #0007,inset 0 1px #fff2}.bottom-nav{backdrop-filter:blur(12px)}}
+@media(prefers-reduced-motion:reduce){.view.active,.item .icon{animation:none!important}html{scroll-behavior:auto}}
+
 </style></head><body><div id='bootScreen'><div class='boot-card'><div class='boot-mark'>💥</div><div class='boot-title'>radinwar</div><div class='boot-copy'>در حال اتصال به جهان بازی…</div><div class='boot-spinner'></div></div></div>
 <header id="appHeader"><div class="logo">🌐 <i>radinwar💥</i></div><div class="user"><span id="userName">فرمانده</span><div class="orb">♛</div></div></header>
 <main>
@@ -456,7 +513,7 @@ $('ownerResourceBtn')?.addEventListener('click',async()=>{const targetId=$('owne
 
 function switchView(name){document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('active',x.dataset.view===name));document.querySelectorAll('.bottom-nav button').forEach(x=>x.classList.toggle('active',x.dataset.view===name));document.querySelectorAll('.view').forEach(x=>x.classList.toggle('active',x.id===name));if(window.radinwarGlobe){if(name==='map')window.radinwarGlobe.resumeAnimation?.();else window.radinwarGlobe.pauseAnimation?.()}if(name==='map'){loadGeo().then(()=>drawGlobe());}if(name==='army'||name==='economy')loadArmy();if(name==='war'||name==='diplomacy')loadDiplomacy();if(name==='market')loadNews();if(name==='announcements')loadAnnouncements();if(name==='groups'){loadGroups();loadGroupInvitations();}if(name==='private')loadPlayers();window.scrollTo({top:0,behavior:'smooth'})}document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>switchView(b.dataset.view));
 const originalLoadPlayers=loadPlayers;loadPlayers=async()=>{await originalLoadPlayers();fillMemberSelect()};
-const CLIENT_BUILD_VERSION='rw-20261112-11';let updateReloadStarted=false;
+const CLIENT_BUILD_VERSION='rw-20261112-12';let updateReloadStarted=false;
 async function checkServerVersion(){
  if(updateReloadStarted||!INIT_DATA)return;
  try{
