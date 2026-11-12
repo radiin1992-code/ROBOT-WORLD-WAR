@@ -31,6 +31,7 @@ if (!server.includes("Object.assign(item.production, BUILDING_RESOURCE_OUTPUTS[k
 if (!server.includes("if(production.energy)energy+=hours*level*Number(production.energy)") || !server.includes("if(production.oil)oil+=hours*active*Number(production.oil)")) throw new Error("Minute-rate building resource production is not applied.");
 if (!server.includes("daily_reward_claims") || !server.includes("/api/daily-reward") || !server.includes("promo_redemptions") || !server.includes("/api/codes/redeem") || !server.includes("/api/owner/codes")) throw new Error("Daily rewards or secret promo-code APIs are missing.");
 if (!server.includes('item.production[field]=Number(item.production[field])*60') || !server.includes('+" "+label+"/دقیقه"')) throw new Error("Building outputs are not converted to per-minute rates.");
+if (!server.includes('["coins","energy","oil","steel","food"]') || !server.includes('+" برق مصرفی/ساعت"')) throw new Error("Hourly power consumption must remain separate from minute-based output.");
 if (!html.includes("dailyRewardBtn") || !html.includes("redeemCodeBtn") || !html.includes("ownerCreatePromoBtn")) throw new Error("Daily reward or promo-code UI is missing.");
 
 if (!server.includes("tech.industry") || !server.includes("tech.agriculture") || !server.includes("tech.materials") || !server.includes("tech.energy")) throw new Error("Economic technologies are not applied to production.");
