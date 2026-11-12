@@ -35,6 +35,8 @@ if (!server.includes('["coins","energy","oil","steel","food"]') || !server.inclu
 if (!html.includes("dailyRewardBtn") || !html.includes("redeemCodeBtn") || !html.includes("ownerCreatePromoBtn")) throw new Error("Daily reward or promo-code UI is missing.");
 
 if (!server.includes("tech.industry") || !server.includes("tech.agriculture") || !server.includes("tech.materials") || !server.includes("tech.energy")) throw new Error("Economic technologies are not applied to production.");
+if (!server.includes("const coinIncomePerSecond=300;") || !server.includes("let coins=seconds*coinIncomePerSecond") || !server.includes("production_at=production_at+($7::int * INTERVAL '1 second')")) throw new Error("Base income must accrue 300 coins for every elapsed second.");
+if (!html.includes("درآمد هر ثانیه:") || !html.includes("shopBigIntValue(value)")) throw new Error("Per-second income label or decimal-safe balance display is missing.");
 const scripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map(match => match[1]).filter(code => code.trim());
 const temp = mkdtempSync(join(tmpdir(), "radinwar-check-"));
 try {
