@@ -240,8 +240,6 @@ app.post("/api/upgrade",auth,async(req,res)=>{
   for (const [resource,amount] of resourceCost) { values.push(amount); sets.push(`${resource}=${resource}-$${values.length}`); guards.push(`${resource} >= $${values.length}`); }
   const q=await pool.query(`UPDATE players SET ${sets.join(",")},updated_at=NOW() WHERE telegram_id=$2 AND ${guards.join(" AND ")} RETURNING telegram_id`,values);
   if(!q.rowCount)return res.status(400).json({ok:false,error:"منابع کافی نیست"});
-  const commander=await pool.query("SELECT country_name,first_name FROM players WHERE telegram_id=$1",[String(req.user.id)]);
-  await publishWorldEvent("🏗️ "+(commander.rows[0]?.country_name||commander.rows[0]?.first_name)+" یکی از زیرساخت‌های ملی خود را ارتقا داد.");
   res.json({ok:true});
 });
 async function ownerOnly(req,res,next){if(!OWNER_IDS.has(String(req.user.id)))return res.status(403).json({ok:false,error:"دسترسی غیرمجاز"});next()}
@@ -421,7 +419,6 @@ app.post("/api/army/recruit",auth,async(req,res)=>{
     await client.query("INSERT INTO military_units(telegram_id,unit_type,quantity) VALUES($1,$2,$3) ON CONFLICT(telegram_id,unit_type) DO UPDATE SET quantity=military_units.quantity+EXCLUDED.quantity",[String(req.user.id),type,item.quantity]);
     await client.query("INSERT INTO transactions(telegram_id,kind,resource,amount) VALUES($1,'recruit',$2,$3)",[String(req.user.id),type,item.quantity]);
     await client.query("COMMIT");
-    await publishWorldEvent("🛡️ "+item.name+" به ساختار دفاعی یک کشور اضافه شد.");
     res.json({ok:true});
   }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
 });
@@ -439,8 +436,6 @@ app.post("/api/army/build",auth,async(req,res)=>{
     if(!q.rowCount){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"منابع لازم برای ساخت این زیرساخت کافی نیست."})}
     await client.query("INSERT INTO national_buildings(telegram_id,building_type,level) VALUES($1,$2,1) ON CONFLICT(telegram_id,building_type) DO UPDATE SET level=national_buildings.level+1",[String(req.user.id),type]);
     await client.query("COMMIT");
-    const p=await pool.query("SELECT country_name FROM players WHERE telegram_id=$1",[String(req.user.id)]);
-    await publishWorldEvent("🏗️ "+(p.rows[0]?.country_name||"یک کشور")+" زیرساخت «"+item.name+"» را توسعه داد.");
     res.json({ok:true});
   }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
 });
@@ -708,8 +703,6 @@ app.post("/api/shop/buy",auth,async(req,res)=>{
     return res.status(400).json({ok:false,error:"پول کافی نداری."});
   }
   await pool.query("INSERT INTO transactions(telegram_id,kind,resource,amount) VALUES($1,'purchase',$2,$3)",[String(req.user.id),item.column,totalAmount]);
-  const buyer=await pool.query("SELECT country_name,first_name FROM players WHERE telegram_id=$1",[String(req.user.id)]);
-  await publishWorldEvent("🏪 "+(buyer.rows[0]?.country_name||buyer.rows[0]?.first_name)+" از بازار جهانی "+totalAmount+" واحد "+item.column+" خریداری کرد.");
   res.set("Cache-Control","no-store").json({ok:true,coins:q.rows[0].coins,quantity,totalPrice,totalAmount,totalIncome});
 });
 app.post("/telegram/webhook",async(req,res)=>{
