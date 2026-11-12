@@ -1,12 +1,15 @@
 import crypto from "node:crypto";
 
 const TECH = [
-  {id:"industry",name:"صنعت هوشمند",icon:"🏭",description:"درآمد پولی ساختمان‌ها و تولید ملی بیشتر می‌شود",max:5,cost:{coins:4500,steel:90},requires:null},
-  {id:"energy",name:"شبکه انرژی",icon:"⚡",description:"تولید برق کشور افزایش پیدا می‌کند",max:5,cost:{coins:3800,steel:70},requires:null},
-  {id:"agriculture",name:"زیست‌فناوری کشاورزی",icon:"🌾",description:"تولید غذای کشور افزایش پیدا می‌کند",max:5,cost:{coins:3500,food:80},requires:null},
-  {id:"materials",name:"متالورژی پیشرفته",icon:"🔩",description:"تولید فولاد کشور افزایش پیدا می‌کند",max:5,cost:{coins:5200,steel:100},requires:"industry"},
-  {id:"intelligence",name:"اطلاعات راهبردی",icon:"🛰️",description:"شانس موفقیت مأموریت‌های اطلاعاتی بیشتر می‌شود",max:5,cost:{coins:6000,energy:80},requires:"industry"},
-  {id:"logistics",name:"لجستیک ملی",icon:"🚚",description:"بازده کلی اقتصاد و شهرها بهتر می‌شود",max:5,cost:{coins:7000,oil:90},requires:"energy"}
+  {id:"industry",name:"صنعت هوشمند",icon:"🏭",description:"درآمد پولی کشور را تقویت می‌کند",effect:"هر سطح: ۴٪ پول بیشتر از تولید ساختمان‌ها",max:5,cost:{coins:4500,steel:90},requires:null},
+  {id:"energy",name:"شبکه انرژی",icon:"⚡",description:"تولید خالص انرژی کشور را افزایش می‌دهد",effect:"هر سطح: ۵٪ انرژی بیشتر",max:5,cost:{coins:3800,steel:70},requires:null},
+  {id:"agriculture",name:"زیست‌فناوری کشاورزی",icon:"🌾",description:"بازده تولید غذا را بالا می‌برد",effect:"هر سطح: ۶٪ غذای بیشتر",max:5,cost:{coins:3500,food:80},requires:null},
+  {id:"materials",name:"متالورژی پیشرفته",icon:"🔩",description:"تولید فولاد کشور را تقویت می‌کند",effect:"هر سطح: ۵٪ فولاد بیشتر",max:5,cost:{coins:5200,steel:100},requires:"industry"},
+  {id:"intelligence",name:"اطلاعات راهبردی",icon:"🛰️",description:"شانس موفقیت مأموریت‌های اطلاعاتی بیشتر می‌شود",effect:"هر سطح: ۵ واحد درصد شانس موفقیت بیشتر",max:5,cost:{coins:6000,energy:80},requires:"industry"},
+  {id:"logistics",name:"لجستیک ملی",icon:"🚚",description:"تولید منابع و درآمد کشور را بهینه می‌کند",effect:"هر سطح: ۲٪ افزایش پول، نفت، فولاد، غذا و انرژی",max:5,cost:{coins:7000,oil:90},requires:"energy"},
+  {id:"military",name:"مهندسی رزمی",icon:"⚔️",description:"قدرت تهاجمی یگان‌های زمینی را افزایش می‌دهد",effect:"هر سطح: ۶٪ قدرت حمله بیشتر برای نیروهای زمینی",max:5,cost:{coins:8500,steel:140,oil:45},requires:"industry"},
+  {id:"aviation",name:"فناوری هوانوردی",icon:"✈️",description:"قدرت تهاجمی یگان‌های هوایی را افزایش می‌دهد",effect:"هر سطح: ۷٪ قدرت حمله بیشتر برای نیروهای هوایی",max:5,cost:{coins:10500,steel:120,energy:100,oil:100},requires:"military"},
+  {id:"defense",name:"سامانه‌های دفاعی",icon:"🛡️",description:"قدرت دفاعی ارتش را در برابر حمله افزایش می‌دهد",effect:"هر سطح: ۷٪ قدرت دفاع بیشتر هنگام دفاع از کشور",max:5,cost:{coins:9000,steel:160,energy:90},requires:"energy"}
 ];
 const CITIES = ["پایتخت","شهر صنعتی","بندر ملی"];
 const EVENTS = [
@@ -97,7 +100,7 @@ export function registerWorldSystems(app,{pool,auth,applyProduction}) {
     const points=Number(seasonScore.rows[0]?.points||0);
     const event=getCurrentWorldEvent();
     const cooldown=spy.rows[0]?.available_at||null;
-    res.json({ok:true,technologies:TECH.map(t=>({...t,level:levels[t.id]||0,locked:t.requires&&(levels[t.requires]||0)<1})),cities:cities.rows,resources:player.rows[0],event,season:{key:getSeasonKey(),points,rank:null},spy:{available_at:cooldown,reports:(await pool.query("SELECT r.id,r.success,r.report,r.created_at,p.country_name AS target_country FROM espionage_reports r JOIN players p ON p.telegram_id=r.target_id WHERE r.attacker_id=$1 ORDER BY r.id DESC LIMIT 8",[id])).rows}});
+    res.json({ok:true,technologies:TECH.map(t=>({...t,level:levels[t.id]||0,locked:t.requires&&(levels[t.requires]||0)<1,activeEffect:(levels[t.id]||0)>0?("اثر فعلی: "+(t.id==="industry"?((levels[t.id]||0)*4)+"٪ پول بیشتر":t.id==="energy"?((levels[t.id]||0)*5)+"٪ انرژی بیشتر":t.id==="agriculture"?((levels[t.id]||0)*6)+"٪ غذا بیشتر":t.id==="materials"?((levels[t.id]||0)*5)+"٪ فولاد بیشتر":t.id==="intelligence"?((levels[t.id]||0)*5)+" واحد درصد شانس اطلاعاتی بیشتر":t.id==="logistics"?((levels[t.id]||0)*2)+"٪ بازده بیشتر همه منابع":t.id==="military"?((levels[t.id]||0)*6)+"٪ قدرت حمله زمینی":t.id==="aviation"?((levels[t.id]||0)*7)+"٪ قدرت حمله هوایی":((levels[t.id]||0)*7)+"٪ قدرت دفاعی")):"هنوز فعال نشده"})),cities:cities.rows,resources:player.rows[0],event,season:{key:getSeasonKey(),points,rank:null},spy:{available_at:cooldown,reports:(await pool.query("SELECT r.id,r.success,r.report,r.created_at,p.country_name AS target_country FROM espionage_reports r JOIN players p ON p.telegram_id=r.target_id WHERE r.attacker_id=$1 ORDER BY r.id DESC LIMIT 8",[id])).rows}});
   });
   app.post("/api/research",auth,async(req,res)=>{
     const tech=TECH.find(x=>x.id===String(req.body?.tech_id||""));
