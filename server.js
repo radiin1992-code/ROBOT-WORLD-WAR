@@ -927,7 +927,7 @@ app.get("/api/world/intel",auth,async(req,res)=>{
  ]);
  const owners=new Map(players.rows.map(p=>[p.country_code,p]));
  const controlById=new Map(controls.rows.map(c=>[c.strait_id,c]));
- const countries=Object.entries(WORLD_RESOURCE_PROFILES).map(([code,profile])=>{const owner=owners.get(code);return {code,profile,resources:Object.entries(profile).filter(([key,value])=>RESOURCE_LABELS[key]&&Number(value)>0).map(([key,value])=>({key,...RESOURCE_LABELS[key],level:Number(value)})),country_name:owner?.country_name||null,country_flag:owner?.country_flag||null,controlled:!!owner}});
+ const countries=Object.entries(WORLD_RESOURCE_PROFILES).map(([code,profile])=>{const owner=owners.get(code);return {code,profile,resources:Object.entries(profile).filter(([key,value])=>RESOURCE_LABELS[key]&&Number(value)>0).map(([key,value])=>({key,...RESOURCE_LABELS[key],level:Number(value)})),country_name:owner?.country_name||isoCountries.getName(code,"fa")||isoCountries.getName(code,"en")||code,country_flag:owner?.country_flag||null,controlled:!!owner}});
  const waterways=STRAIT_CATALOG.map(w=>{const c=controlById.get(w.id);return {...w,closed:!!c?.closed,controller_country:c?.country_name||null,controller_flag:c?.country_flag||null}});
  res.json({ok:true,countries,waterways,resourceScale:"شاخص وفور ۰ تا ۵؛ سطح بازی است و معادل ذخیره دقیق یا تولید واقعی نیست"});
 });
