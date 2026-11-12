@@ -2,7 +2,7 @@ name: Validate game source
 
 on:
   push:
-    branches: [main]
+    branches: [main, realistic-world-v2]
   pull_request:
     branches: [main]
 
