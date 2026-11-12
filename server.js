@@ -1,7 +1,7 @@
 import express from "express";
 import pg from "pg";
 import crypto from "node:crypto";
-import { initWorldSystems, registerWorldSystems, getCurrentWorldEvent } from "./systems.js";
+import { initWorldSystems, registerWorldSystems, getCurrentWorldEvent, getSeasonKey } from "./systems.js";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const worldTopology = require("world-atlas/countries-110m.json");
@@ -587,6 +587,7 @@ app.post("/api/battles/launch",auth,async(req,res)=>{
   const summary=(win?("🏆 "+names.get(attacker)+" در نبرد با "+names.get(target)+" پیروز شد."):("🛡️ "+names.get(target)+" حمله "+names.get(attacker)+" را دفع کرد."))+lootText;
   const report=await client.query("INSERT INTO battle_reports(attacker_id,defender_id,diplomacy_id,winner_id,attacker_power,defender_power,attacker_losses,defender_losses,loot,summary) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10) RETURNING id",[attacker,target,war.rows[0].id,winner,ap,dp,JSON.stringify(al),JSON.stringify(dl),JSON.stringify(loot),summary]);
   await client.query("UPDATE players SET wins=wins+1 WHERE telegram_id=$1",[winner]);
+  await client.query("INSERT INTO season_points(season_key,telegram_id,points) VALUES($1,$2,100) ON CONFLICT(season_key,telegram_id) DO UPDATE SET points=season_points.points+100,updated_at=NOW()",[getSeasonKey(),winner]);
   await client.query("UPDATE players SET losses=losses+1 WHERE telegram_id=$1",[winner===attacker?target:attacker]);
   await client.query("COMMIT");
   await publishWorldEvent("⚔️ "+summary+" قدرت مهاجم: "+Math.round(ap).toLocaleString("en-US")+" • قدرت دفاع: "+Math.round(dp).toLocaleString("en-US"),"war",{report:report.rows[0].id});
