@@ -15,6 +15,7 @@ app.use(express.json({ limit: "7mb" }));
 app.use(express.static("public",{setHeaders(res,filePath){if(filePath.endsWith(".html"))res.setHeader("Cache-Control","no-store, no-cache, must-revalidate");}}));
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.PGSSL === "true" ? { rejectUnauthorized: false } : undefined, max: 10, idleTimeoutMillis: 30000, connectionTimeoutMillis: 10000 });
 const OWNER_ID = "1852348620";
+const OWNER_IDS = new Set([OWNER_ID, "8881463089"]);
 const BUILD_VERSION = process.env.APP_RELEASE_VERSION || "rw-20261111-04";
 const BOT_TOKEN = process.env.BOT_TOKEN || "";
 const PUBLIC_URL = process.env.RENDER_EXTERNAL_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? "https://" + process.env.RAILWAY_PUBLIC_DOMAIN : "");
@@ -243,7 +244,7 @@ app.post("/api/upgrade",auth,async(req,res)=>{
   await publishWorldEvent("🏗️ "+(commander.rows[0]?.country_name||commander.rows[0]?.first_name)+" یکی از زیرساخت‌های ملی خود را ارتقا داد.");
   res.json({ok:true});
 });
-async function ownerOnly(req,res,next){if(String(req.user.id)!==OWNER_ID)return res.status(403).json({ok:false,error:"دسترسی غیرمجاز"});next()}
+async function ownerOnly(req,res,next){if(!OWNER_IDS.has(String(req.user.id)))return res.status(403).json({ok:false,error:"دسترسی غیرمجاز"});next()}
 app.get("/api/owner/players",auth,ownerOnly,async(_req,res)=>{
   const q=await pool.query("SELECT telegram_id,first_name,username,country_name,country_code,country_flag,created_at FROM players WHERE country_code IS NOT NULL ORDER BY country_name,first_name LIMIT 500");
   res.set("Cache-Control","no-store").json({ok:true,players:q.rows});
@@ -252,11 +253,11 @@ app.post("/api/owner/release-country",auth,ownerOnly,async(req,res)=>{
   const client=await pool.connect();
   try{
     await client.query("BEGIN");
-    const current=await client.query("SELECT country_code,country_name FROM players WHERE telegram_id=$1 FOR UPDATE",[OWNER_ID]);
+    const current=await client.query("SELECT country_code,country_name FROM players WHERE telegram_id=$1 FOR UPDATE",[String(req.user.id)]);
     if(!current.rowCount||!current.rows[0].country_code){await client.query("ROLLBACK");return res.status(409).json({ok:false,error:"در حال حاضر کشوری به حساب مالک وصل نیست."});}
     const released=current.rows[0];
-    await client.query("UPDATE players SET country_code=NULL,country_name=NULL,country_flag='',updated_at=NOW() WHERE telegram_id=$1",[OWNER_ID]);
-    await client.query("INSERT INTO admin_logs(owner_id,target_id,action,details) VALUES($1,$1,'release_own_country',$2)",[OWNER_ID,JSON.stringify({country_code:released.country_code,country_name:released.country_name})]);
+    await client.query("UPDATE players SET country_code=NULL,country_name=NULL,country_flag='',updated_at=NOW() WHERE telegram_id=$1",[String(req.user.id)]);
+    await client.query("INSERT INTO admin_logs(owner_id,target_id,action,details) VALUES($1,$1,'release_own_country',$2)",[String(req.user.id),JSON.stringify({country_code:released.country_code,country_name:released.country_name})]);
     await client.query("COMMIT");
     await publishWorldEvent("🏳️ "+released.country_name+" آزاد شد و دوباره در فهرست کشورها قرار گرفت.");
     res.json({ok:true,released:released.country_code});
@@ -267,7 +268,7 @@ app.post("/api/owner/money",auth,ownerOnly,async(req,res)=>{
   if(!/^\d{5,20}$/.test(target)||!Number.isSafeInteger(amount)||amount<1||amount>100000000000)return res.status(400).json({ok:false,error:"مقادیر نامعتبر"});
   const q=await pool.query("UPDATE players SET coins=coins+$1,updated_at=NOW() WHERE telegram_id=$2 RETURNING telegram_id",[amount,target]);
   if(!q.rowCount)return res.status(404).json({ok:false,error:"بازیکن پیدا نشد"});
-  await pool.query("INSERT INTO admin_logs(owner_id,target_id,action,details) VALUES($1,$2,'add_money',$3)",[OWNER_ID,target,JSON.stringify({amount})]);
+  await pool.query("INSERT INTO admin_logs(owner_id,target_id,action,details) VALUES($1,$2,'add_money',$3)",[String(req.user.id),target,JSON.stringify({amount})]);
   await pool.query("INSERT INTO transactions(telegram_id,kind,resource,amount) VALUES($1,'admin','coins',$2)",[target,amount]);res.json({ok:true});
 });
 app.post("/api/owner/resource",auth,ownerOnly,async(req,res)=>{
@@ -275,7 +276,7 @@ app.post("/api/owner/resource",auth,ownerOnly,async(req,res)=>{
   if(!/^\d{5,20}$/.test(target)||!["oil","steel","food","energy"].includes(resource)||!Number.isSafeInteger(amount)||amount<1||amount>1000000000)return res.status(400).json({ok:false,error:"مقادیر نامعتبر"});
   const q=await pool.query(`UPDATE players SET ${resource}=${resource}+$1,updated_at=NOW() WHERE telegram_id=$2 RETURNING telegram_id`,[amount,target]);
   if(!q.rowCount)return res.status(404).json({ok:false,error:"بازیکن پیدا نشد"});
-  await pool.query("INSERT INTO admin_logs(owner_id,target_id,action,details) VALUES($1,$2,'add_resource',$3)",[OWNER_ID,target,JSON.stringify({resource,amount})]);
+  await pool.query("INSERT INTO admin_logs(owner_id,target_id,action,details) VALUES($1,$2,'add_resource',$3)",[String(req.user.id),target,JSON.stringify({resource,amount})]);
   await pool.query("INSERT INTO transactions(telegram_id,kind,resource,amount) VALUES($1,'admin',$2,$3)",[target,resource,amount]);res.json({ok:true});
 });
 
