@@ -56,6 +56,50 @@ button,.panel,.item,.stat,.post,.view-banner{transition:transform .16s ease,bord
 #shopGrid .shop-quantity-row{display:grid;grid-template-columns:1fr auto;gap:7px;align-items:center;margin:9px 0}#shopGrid .shop-quantity-row label{font-size:10px;color:#d8e1ef}#shopGrid .shop-quantity-row .field{margin:0;min-width:0}#shopGrid .shop-max{padding:9px 13px;color:#241a0a;background:linear-gradient(120deg,#f5d98d,#b78d48);border:0}#shopGrid [data-total]{color:#f4d58f}#shopGrid [data-receive]{color:#a9d9ee}#shopGrid [data-buy]:disabled{opacity:.48;filter:saturate(.5);cursor:not-allowed}
 /* Interactive campaign map */
 .battle-map-card{margin:12px 0;padding:12px;border:1px solid #7b6035;border-radius:19px;background:linear-gradient(145deg,#17263a,#0a1320);box-shadow:inset 0 1px #fff1,0 12px 28px #0004}.battle-map-heading{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}.battle-map-heading b{color:#f4d58e;font-size:14px}.battle-map-heading small{color:#aabbd0;font-size:10px;line-height:1.8}.battle-map svg{width:100%;height:auto;display:block;aspect-ratio:2/1;border:1px solid #35536c;border-radius:13px;background:#061522;touch-action:pan-y}.battle-map .territory{stroke:#b5d4df;stroke-width:1;vector-effect:non-scaling-stroke;stroke-linejoin:round;cursor:pointer;transition:fill .18s,filter .18s}.battle-map .territory.free{fill:#1b4963;opacity:.62;cursor:default}.battle-map .territory.held{fill:#426f82}.battle-map .territory.mine{fill:#d9b45e;stroke:#fff0b8;stroke-width:1.6}.battle-map .territory.war{fill:#a8444b;stroke:#ffb0a9;stroke-width:1.6;filter:drop-shadow(0 0 3px #f34b55)}.battle-map .territory.selected{fill:#f0a34c;stroke:#fff2c9;stroke-width:2.3;filter:drop-shadow(0 0 6px #ffbd5b)}.battle-map .front-line{fill:none;stroke:#ff7279;stroke-width:2.8;stroke-dasharray:7 6;vector-effect:non-scaling-stroke;animation:frontmarch 1.5s linear infinite;pointer-events:none}.battle-map .front-pulse{fill:#ff626d;stroke:#fff1d1;stroke-width:1.2;vector-effect:non-scaling-stroke;animation:frontpulse 1.6s ease-out infinite;pointer-events:none}.battle-map .country-pin{font-size:12px;text-anchor:middle;paint-order:stroke;stroke:#061522;stroke-width:3px;pointer-events:none}.battle-map-selection{margin-top:9px;padding:9px 11px;border:1px solid #3a5069;border-radius:11px;background:#091522;color:#d9e6f5;font-size:10px;line-height:1.8}.battle-map-legend{display:flex;flex-wrap:wrap;gap:12px;margin:9px 0 2px;color:#aebdd0;font-size:9px}.battle-map-legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-left:4px}.battle-map .map-graticule line{stroke:#8ec6d8;stroke-opacity:.12;stroke-width:1}.battle-map .map-caption{fill:#e5d7ad;font-size:12px;opacity:.8}@keyframes frontmarch{to{stroke-dashoffset:-26}}@keyframes frontpulse{0%{r:3;opacity:1}100%{r:12;opacity:0}}@media(max-width:600px){.battle-map-card{padding:9px}.battle-map svg{border-radius:10px}}
+
+/* RADINWAR: cinematic 3D command interface */
+:root{--neon:#70eaff;--violet:#9b8cff;--warm:#ffd987;--glass:rgba(17,29,48,.78)}
+body{background:radial-gradient(ellipse at 12% 8%,#17395a88,transparent 38%),radial-gradient(ellipse at 88% 28%,#49336c44,transparent 35%),linear-gradient(160deg,#050914,#091321 52%,#070b15);background-attachment:fixed}
+body:before,body:after{content:"";position:fixed;z-index:-1;pointer-events:none;border-radius:50%;filter:blur(2px);opacity:.42}
+body:before{width:38vw;height:38vw;min-width:180px;min-height:180px;top:12%;left:-18%;background:radial-gradient(circle,#36bde733,transparent 68%);animation:ambientDrift 18s ease-in-out infinite alternate}
+body:after{width:45vw;height:45vw;min-width:210px;min-height:210px;right:-22%;bottom:8%;background:radial-gradient(circle,#9673ff24,transparent 68%);animation:ambientDrift 22s ease-in-out infinite alternate-reverse}
+header{background:linear-gradient(100deg,#0a1425ed,#17243aeb,#0a1425ed);border-bottom:1px solid #7edfff44;box-shadow:0 8px 30px #0005,inset 0 -1px #ffffff0a}
+.logo{text-shadow:0 0 18px #6eeaff45}.orb{box-shadow:0 0 0 4px #e8c87912,0 0 24px #e8c87955,inset 0 2px 5px #fff8;animation:orbFloat 4s ease-in-out infinite}
+main{perspective:1200px}
+.panel,.game-card,.item,.post,.stat,.resource-chip,.news-item,.playerrow,.grouprow,.country-rules,.loading-card,.battle-map-card{position:relative;isolation:isolate;overflow:hidden;border-color:#6382aa66;background:linear-gradient(145deg,rgba(28,48,74,.94),rgba(9,18,32,.96));box-shadow:0 16px 35px #0005,inset 0 1px #ffffff12,inset 0 -1px #0005;transform-style:preserve-3d}
+.panel:before,.game-card:before,.item:before,.post:before,.stat:before,.resource-chip:before,.news-item:before,.action-card:after,.hero-country:after{content:"";position:absolute;inset:0;pointer-events:none;z-index:0;background:linear-gradient(115deg,transparent 12%,#ffffff0b 38%,transparent 62%);transform:translateX(-120%);animation:surfaceSweep 9s ease-in-out infinite}
+.panel>* ,.game-card>* ,.item>* ,.post>* ,.stat>* ,.resource-chip>* ,.news-item>*{position:relative;z-index:1}
+.action-card{transform:translateZ(0);border:1px solid #9bcfff55;background:#101c30;box-shadow:0 18px 34px #0008,inset 0 1px #ffffff32,inset 0 -22px 35px #02071388;transition:transform .28s cubic-bezier(.2,.8,.2,1),border-color .28s,box-shadow .28s}
+.action-card:before{transform:scale(1.035);filter:saturate(1.18) contrast(1.05);transition:transform .55s cubic-bezier(.2,.8,.2,1),filter .4s}
+.action-card:after{border-radius:inherit;box-shadow:inset 0 0 0 1px #ffffff0c,inset 0 18px 30px #ffffff08}
+.action-card .card-icon{transform:translateZ(28px);box-shadow:0 9px 0 #61451f,0 14px 25px #0009,inset 0 2px #fff9;transition:transform .25s}
+.action-card b{transform:translateZ(20px);text-shadow:0 3px 12px #000,0 0 16px #f4d99555}
+.hero-country{border-color:#8fcfff77;box-shadow:0 24px 55px #0009,inset 0 1px #ffffff44;transform:translateZ(0)}
+.hero-country:before{filter:saturate(1.18) contrast(1.08);transform:scale(1.03);animation:heroBreath 16s ease-in-out infinite alternate}
+.glass-stats{background:linear-gradient(145deg,#101e32dc,#08111edb);border-color:#c3eaff66;box-shadow:0 18px 45px #0008,inset 0 1px #ffffff26,inset 0 -1px #0008;transform:perspective(900px) rotateY(-2deg) translateZ(18px)}
+.balance-value{text-shadow:0 0 24px #f4d58b55}
+.btn{position:relative;overflow:hidden;background:linear-gradient(135deg,#294d75,#172b48);border-color:#79b5dc88;box-shadow:0 5px 0 #0a1423,0 9px 18px #0005,inset 0 1px #ffffff2b;transition:transform .16s,filter .2s,box-shadow .2s}
+.btn.primary{background:linear-gradient(135deg,#9df5fa,#6d9fff 55%,#8d87ff);box-shadow:0 5px 0 #34518c,0 10px 22px #5e9fff44,inset 0 1px #fff}
+.btn:active{transform:translateY(3px) scale(.985);box-shadow:0 2px 0 #0a1423,0 4px 10px #0005}
+.tabs button,.bottom-nav,.round-icon,.rank-medal{box-shadow:0 10px 24px #0006,inset 0 1px #ffffff20}
+.tabs button.active{box-shadow:0 0 18px #70eaff30,inset 0 1px #ffffff38}
+.bottom-nav{background:linear-gradient(145deg,#202b40f2,#0c1423f2);border-color:#8eb5d266;box-shadow:0 18px 45px #000b,inset 0 1px #ffffff30}
+.bottom-nav button.active span{box-shadow:0 7px 0 #765323,0 12px 28px #f5ca6c66,inset 0 2px #fff}
+.resource-chip{background:linear-gradient(145deg,#1b2c43,#0c1625);border-color:#4d6687}
+.resource-chip span{filter:drop-shadow(0 0 8px #8ddfff66)}
+.globe-shell{box-shadow:0 22px 50px #0009,inset 0 0 60px #2a9ac522;border-color:#78dfff66}
+.battle-map-card{box-shadow:0 18px 38px #0008,inset 0 1px #ffffff22}
+.field,.search,select,textarea{background:linear-gradient(145deg,#0b1728,#101f33);border-color:#4d6687;box-shadow:inset 0 3px 9px #0005;color:#f5f8ff}
+.field:focus,.search:focus{border-color:var(--neon);box-shadow:0 0 0 3px #70eaff20,0 0 20px #70eaff18,inset 0 2px 8px #0005}
+.toast{box-shadow:0 12px 35px #0009,0 0 20px #70eaff33}
+@keyframes ambientDrift{from{transform:translate3d(0,-2%,0) scale(.92)}to{transform:translate3d(8%,10%,0) scale(1.12)}}
+@keyframes orbFloat{0%,100%{transform:translateY(0) rotateY(0)}50%{transform:translateY(-3px) rotateY(12deg)}}
+@keyframes surfaceSweep{0%,70%,100%{transform:translateX(-120%)}84%{transform:translateX(120%)}}
+@keyframes heroBreath{from{transform:scale(1.02);filter:saturate(1.08)}to{transform:scale(1.09);filter:saturate(1.3)}}
+@media(hover:hover) and (pointer:fine){.action-card:hover{transform:translateY(-7px) rotateX(2deg) rotateY(-1deg);border-color:#a5eaff;box-shadow:0 28px 48px #0009,0 0 25px #63cfff20,inset 0 1px #ffffff44}.action-card:hover:before{transform:scale(1.13);filter:saturate(1.35)}.action-card:hover .card-icon{transform:translateY(-5px) translateZ(35px) rotate(-5deg)}.game-card:hover,.item:hover,.news-item:hover{transform:translateY(-3px);border-color:#78c8ec;box-shadow:0 18px 32px #0007,inset 0 1px #ffffff1c}}
+@media(max-width:600px){body{background-attachment:scroll}.panel,.game-card,.item,.post,.stat,.resource-chip,.news-item{box-shadow:0 10px 23px #0005,inset 0 1px #ffffff12}.action-card{box-shadow:0 12px 25px #0008,inset 0 1px #ffffff28}.glass-stats{transform:none}.action-card:before{filter:saturate(1.12)}}
+@media(prefers-reduced-motion:reduce){body:before,body:after,.orb,.hero-country:before,.panel:before,.game-card:before,.item:before,.post:before,.stat:before,.resource-chip:before,.news-item:before{animation:none!important}.action-card,.action-card:before,.action-card .card-icon{transition:none!important}}
+
 </style></head><body><div id='bootScreen'><div class='boot-card'><div class='boot-mark'>💥</div><div class='boot-title'>radinwar</div><div class='boot-copy'>در حال اتصال به جهان بازی…</div><div class='boot-spinner'></div></div></div>
 <header id="appHeader"><div class="logo">🌐 <i>radinwar💥</i></div><div class="user"><span id="userName">فرمانده</span><div class="orb">♛</div></div></header>
 <main>
@@ -412,7 +456,7 @@ $('ownerResourceBtn')?.addEventListener('click',async()=>{const targetId=$('owne
 
 function switchView(name){document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('active',x.dataset.view===name));document.querySelectorAll('.bottom-nav button').forEach(x=>x.classList.toggle('active',x.dataset.view===name));document.querySelectorAll('.view').forEach(x=>x.classList.toggle('active',x.id===name));if(window.radinwarGlobe){if(name==='map')window.radinwarGlobe.resumeAnimation?.();else window.radinwarGlobe.pauseAnimation?.()}if(name==='map'){loadGeo().then(()=>drawGlobe());}if(name==='army'||name==='economy')loadArmy();if(name==='war'||name==='diplomacy')loadDiplomacy();if(name==='market')loadNews();if(name==='announcements')loadAnnouncements();if(name==='groups'){loadGroups();loadGroupInvitations();}if(name==='private')loadPlayers();window.scrollTo({top:0,behavior:'smooth'})}document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>switchView(b.dataset.view));
 const originalLoadPlayers=loadPlayers;loadPlayers=async()=>{await originalLoadPlayers();fillMemberSelect()};
-const CLIENT_BUILD_VERSION='rw-20261112-10';let updateReloadStarted=false;
+const CLIENT_BUILD_VERSION='rw-20261112-11';let updateReloadStarted=false;
 async function checkServerVersion(){
  if(updateReloadStarted||!INIT_DATA)return;
  try{
