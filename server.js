@@ -27,7 +27,7 @@ for (const method of ["get","post","put","patch","delete"]) {
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.PGSSL === "true" ? { rejectUnauthorized: false } : undefined, max: 10, idleTimeoutMillis: 30000, connectionTimeoutMillis: 10000 });
 const OWNER_ID = "1852348620";
 const OWNER_IDS = new Set([OWNER_ID, "8881463089"]);
-const BUILD_VERSION='rw-20261112-16';
+const BUILD_VERSION='rw-20261112-17';
 const BOT_TOKEN = process.env.BOT_TOKEN || "";
 const PUBLIC_URL = process.env.RENDER_EXTERNAL_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? "https://" + process.env.RAILWAY_PUBLIC_DOMAIN : "");
 const MINI_APP_URL = process.env.MINI_APP_URL || PUBLIC_URL;
@@ -214,6 +214,11 @@ async function initDb() {
     CREATE INDEX IF NOT EXISTS direct_messages_pair_idx ON direct_messages(sender_id,receiver_id,id);
     CREATE INDEX IF NOT EXISTS announcements_id_idx ON announcements(id DESC);
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS daily_reward_claims (telegram_id BIGINT PRIMARY KEY REFERENCES players(telegram_id) ON DELETE CASCADE,last_claim_date DATE NOT NULL,streak INT NOT NULL DEFAULT 1);
+    CREATE TABLE IF NOT EXISTS promo_codes (id BIGSERIAL PRIMARY KEY,code_hash CHAR(64) NOT NULL UNIQUE,reward JSONB NOT NULL,max_uses INT NOT NULL DEFAULT 1,uses INT NOT NULL DEFAULT 0,expires_at TIMESTAMPTZ,created_by BIGINT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+    CREATE TABLE IF NOT EXISTS promo_redemptions (code_id BIGINT NOT NULL REFERENCES promo_codes(id) ON DELETE CASCADE,telegram_id BIGINT NOT NULL REFERENCES players(telegram_id) ON DELETE CASCADE,redeemed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),PRIMARY KEY(code_id,telegram_id));
+  `);
   await pool.query("CREATE TABLE IF NOT EXISTS game_settings (setting_key TEXT PRIMARY KEY, setting_value TEXT NOT NULL DEFAULT '')");
   const economyReset=await pool.query("INSERT INTO game_settings(setting_key,setting_value) VALUES('economy_reset_20261112','done') ON CONFLICT(setting_key) DO NOTHING RETURNING setting_key");
   if(economyReset.rowCount) await pool.query("UPDATE players SET coins=10000,shop_income=0,production_at=NOW(),updated_at=NOW()");
@@ -302,6 +307,18 @@ app.post("/api/upgrade",auth,async(req,res)=>{
   if(!q.rowCount)return res.status(400).json({ok:false,error:"منابع کافی نیست"});
   res.json({ok:true});
 });
+app.get("/api/daily-reward",auth,async(req,res)=>{
+ await ensurePlayer(req.user);const id=String(req.user.id),q=await pool.query("SELECT last_claim_date::text,streak FROM daily_reward_claims WHERE telegram_id=$1",[id]),today=new Date().toISOString().slice(0,10),row=q.rows[0]||null;
+ res.set("Cache-Control","no-store").json({ok:true,claimed:row?.last_claim_date===today,last_claim_date:row?.last_claim_date||null,streak:Number(row?.streak||0),reward:{coins:5000,oil:150,steel:150,food:200,energy:100}});
+});
+app.post("/api/daily-reward",auth,async(req,res)=>{
+ await ensurePlayer(req.user);const id=String(req.user.id),today=new Date().toISOString().slice(0,10),client=await pool.connect();
+ try{await client.query("BEGIN");await client.query("SELECT telegram_id FROM players WHERE telegram_id=$1 FOR UPDATE",[id]);const old=await client.query("SELECT last_claim_date::text,streak FROM daily_reward_claims WHERE telegram_id=$1 FOR UPDATE",[id]);if(old.rows[0]?.last_claim_date===today){await client.query("ROLLBACK");return res.status(409).json({ok:false,error:"جایزه امروز رو قبلاً گرفتی."});}const yesterday=new Date(Date.now()-86400000).toISOString().slice(0,10),streak=old.rows[0]?.last_claim_date===yesterday?Math.min(7,Number(old.rows[0].streak||0)+1):1,reward={coins:5000+Math.max(0,streak-1)*500,oil:150,steel:150,food:200,energy:100};await client.query("UPDATE players SET coins=coins+$1,oil=oil+$2,steel=steel+$3,food=food+$4,energy=energy+$5,updated_at=NOW() WHERE telegram_id=$6",[reward.coins,reward.oil,reward.steel,reward.food,reward.energy,id]);await client.query("INSERT INTO daily_reward_claims(telegram_id,last_claim_date,streak) VALUES($1,$2::date,$3) ON CONFLICT(telegram_id) DO UPDATE SET last_claim_date=EXCLUDED.last_claim_date,streak=EXCLUDED.streak",[id,today,streak]);await client.query("COMMIT");res.json({ok:true,reward,streak});}catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
+});
+app.post("/api/codes/redeem",auth,async(req,res)=>{
+ const code=String(req.body?.code||"").trim().toUpperCase();if(!/^[A-Z0-9_-]{4,40}$/.test(code))return res.status(400).json({ok:false,error:"کد معتبر نیست."});const hash=crypto.createHash("sha256").update(code).digest("hex"),id=String(req.user.id),client=await pool.connect();
+ try{await ensurePlayer(req.user);await client.query("BEGIN");const found=await client.query("SELECT id,reward,max_uses,uses,expires_at FROM promo_codes WHERE code_hash=$1 FOR UPDATE",[hash]);if(!found.rowCount){await client.query("ROLLBACK");return res.status(404).json({ok:false,error:"کد پیدا نشد یا معتبر نیست."});}const c=found.rows[0];if(c.expires_at&&new Date(c.expires_at)<=new Date()){await client.query("ROLLBACK");return res.status(410).json({ok:false,error:"مهلت استفاده از این کد تموم شده."});}if(Number(c.uses)>=Number(c.max_uses)){await client.query("ROLLBACK");return res.status(409).json({ok:false,error:"ظرفیت استفاده از این کد تموم شده."});}const used=await client.query("SELECT 1 FROM promo_redemptions WHERE code_id=$1 AND telegram_id=$2",[c.id,id]);if(used.rowCount){await client.query("ROLLBACK");return res.status(409).json({ok:false,error:"این کد رو قبلاً استفاده کردی."});}const reward=c.reward||{};for(const key of ["coins","oil","steel","food","energy"]){const amount=Number(reward[key]||0);if(amount>0)await client.query("UPDATE players SET "+key+"="+key+"+$1,updated_at=NOW() WHERE telegram_id=$2",[amount,id]);}await client.query("INSERT INTO promo_redemptions(code_id,telegram_id) VALUES($1,$2)",[c.id,id]);await client.query("UPDATE promo_codes SET uses=uses+1 WHERE id=$1",[c.id]);await client.query("COMMIT");res.json({ok:true,reward});}catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
+});
 async function ownerOnly(req,res,next){if(!OWNER_IDS.has(String(req.user.id)))return res.status(403).json({ok:false,error:"دسترسی غیرمجاز"});next()}
 app.post("/api/owner/unit-catalog/:type/image",auth,ownerOnly,async(req,res)=>{
   const type=String(req.params.type||""),imageUrl=String(req.body?.imageUrl||"").trim();
@@ -337,6 +354,9 @@ app.post("/api/owner/unit-catalog/:type/delete",auth,ownerOnly,async(req,res)=>{
     await client.query("COMMIT");
     res.json({ok:true,name:found.rows[0].name});
   }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
+});
+app.post("/api/owner/codes",auth,ownerOnly,async(req,res)=>{
+ const code=String(req.body?.code||"").trim().toUpperCase(),maxUses=Number(req.body?.maxUses??1),expiresHours=Number(req.body?.expiresHours??0),reward={};for(const key of ["coins","oil","steel","food","energy"]){const n=Number(req.body?.reward?.[key]??0);if(!Number.isSafeInteger(n)||n<0||n>1000000000000)return res.status(400).json({ok:false,error:"مقدار جایزه نامعتبر است."});reward[key]=n;}if(!/^[A-Z0-9_-]{4,40}$/.test(code)||!Number.isSafeInteger(maxUses)||maxUses<1||maxUses>100000||!Number.isFinite(expiresHours)||expiresHours<0||expiresHours>87600||!Object.values(reward).some(v=>v>0))return res.status(400).json({ok:false,error:"کد، تعداد استفاده یا جایزه معتبر نیست."});const hash=crypto.createHash("sha256").update(code).digest("hex"),expiresAt=expiresHours?new Date(Date.now()+expiresHours*3600000):null;try{await pool.query("INSERT INTO promo_codes(code_hash,reward,max_uses,created_by,expires_at) VALUES($1,$2::jsonb,$3,$4,$5)",[hash,JSON.stringify(reward),maxUses,String(req.user.id),expiresAt]);}catch(e){if(e.code==="23505")return res.status(409).json({ok:false,error:"این کد قبلاً ساخته شده؛ یک کد متفاوت انتخاب کن."});throw e;}res.json({ok:true});
 });
 app.get("/api/owner/players",auth,ownerOnly,async(_req,res)=>{
   const q=await pool.query("SELECT telegram_id,first_name,username,country_name,country_code,country_flag,created_at FROM players WHERE country_code IS NOT NULL ORDER BY country_name,first_name LIMIT 500");
@@ -439,12 +459,13 @@ const BUILDING_CATALOG = {
 const BUILDING_RESOURCE_OUTPUTS = {"power":{"energy":60},"solar":{"energy":45},"wind":{"energy":50},"hydro":{"energy":75},"oilfield":{"oil":150},"refinery":{"oil":220},"mine":{"steel":70},"steelworks":{"steel":120},"farm":{"food":120},"fishery":{"food":70},"commercial":{"food":8},"mall":{"food":12},"tourism":{"food":15},"hotel":{"food":10},"bank":{"energy":4},"techpark":{"steel":18},"cargoport":{"oil":18},"airport":{"oil":22},"datacenter":{"energy":16},"recycling":{"steel":35},"geothermal":{"energy":85},"nuclear":{"energy":200},"tidal":{"energy":70},"biomass":{"energy":48},"wastepower":{"energy":58},"solarpark":{"energy":140},"offshorewind":{"energy":155},"battery":{"energy":32},"gasfield":{"oil":300},"petrochem":{"oil":110,"steel":12},"factory":{"steel":55},"electronics":{"steel":30,"energy":6},"software":{"energy":12},"exchange":{"steel":5},"logistics":{"oil":18,"food":8},"containerport":{"oil":25,"steel":12},"university":{"energy":8},"hospital":{"food":20},"desalination":{"food":55},"greenhouse":{"food":180},"livestock":{"food":145},"quarry":{"steel":90},"lithium":{"steel":160},"media":{"energy":8},"research":{"steel":15}};
 for (const [key,item] of Object.entries(BUILDING_CATALOG)) {
   Object.assign(item.production, BUILDING_RESOURCE_OUTPUTS[key] || {});
+  for (const field of ["coins","energy","oil","steel","food","energyNeed"]) if(Number(item.production[field]||0)>0)item.production[field]=Number(item.production[field])*60;
   const p=item.production, parts=[];
   for (const [resource,label] of [["energy","برق"],["oil","نفت"],["steel","فولاد"],["food","غذا"],["coins","پول"]]) {
     const amount=Number(p[resource]||0);
-    if(amount>0)parts.push("+"+amount.toLocaleString("en-US")+" "+label+"/ساعت");
+    if(amount>0)parts.push("+"+amount.toLocaleString("en-US")+" "+label+"/دقیقه");
   }
-  if(p.energyNeed)parts.push("-"+Number(p.energyNeed).toLocaleString("en-US")+" برق مصرفی/ساعت");
+  if(p.energyNeed)parts.push("-"+Number(p.energyNeed).toLocaleString("en-US")+" برق مصرفی/دقیقه");
   item.output=parts.join(" • ");
 }
 
@@ -478,7 +499,7 @@ async function applyProduction(id){
     const seconds=Math.max(0,Math.min(86400,(Date.now()-new Date(p.rows[0].production_at).getTime())/1000));
     const hours=seconds/3600;
     if(seconds>=1){
-      const base=countryEconomy(p.rows[0].country_code); let coins=seconds*5,initialEnergy=Number(p.rows[0].energy),initialOil=Number(p.rows[0].oil),initialSteel=Number(p.rows[0].steel),initialFood=Number(p.rows[0].food),energy=initialEnergy+hours*base.energy,oil=initialOil+hours*base.oil,steel=initialSteel+hours*base.steel,food=initialFood+hours*base.food;
+      const base=countryEconomy(p.rows[0].country_code); let coins=seconds*5,initialEnergy=Number(p.rows[0].energy),initialOil=Number(p.rows[0].oil),initialSteel=Number(p.rows[0].steel),initialFood=Number(p.rows[0].food),energy=initialEnergy+hours*base.energy*60,oil=initialOil+hours*base.oil*60,steel=initialSteel+hours*base.steel*60,food=initialFood+hours*base.food*60;
       for(const [key,item] of Object.entries(BUILDING_CATALOG)){
         const production=item.production||{},level=levels[key]||0;
         if(!level)continue;
