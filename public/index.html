@@ -258,8 +258,7 @@ function renderArmyCatalog(d){
   const cost=x.cost||{},img=x.imageUrl?'<img src="'+esc(x.imageUrl)+'" alt="" style="width:100%;height:112px;object-fit:cover;border-radius:11px;border:1px solid #ffffff24">':'<span class="game-icon">'+esc(x.icon||"🧩")+'</span>';
   const isOwner=OWNER_IDS.has(String(me?.telegram_id));
   const removeButton=isOwner&&key.startsWith("custom_")?'<button class="btn" data-delete-unit="'+key+'" style="width:100%;margin-top:6px;color:#ff8c8c">حذف مدل</button>':"";
-  const imageButton=isOwner?'<div class="row" style="margin-top:6px"><input class="field" type="file" accept="image/png,image/jpeg,image/webp" data-unit-image="'+key+'" style="min-width:0;flex:1"><button class="btn" type="button" data-save-unit-image="'+key+'">ثبت عکس</button></div>':"";
-  return '<article class="game-card">'+img+'<b>'+esc(x.name)+'</b><small>'+esc(x.categoryName||"سامانه پایه")+'</small><small>موجودی: '+fmt(d.units[key])+' عدد</small><small>هزینه هر بسته: '+fmt(cost.coins)+' پول • '+fmt(cost.steel)+' فولاد • '+fmt(cost.food)+' غذا • '+fmt(cost.energy)+' برق • '+fmt(cost.oil)+' نفت</small><div class="row"><input class="field" type="number" min="1" max="1000000" step="1" value="1" inputmode="numeric" data-batches="'+key+'" style="min-width:0;width:100px"><button class="btn" type="button" data-max="'+key+'" style="flex:0 0 auto">MAX</button></div><small data-total="'+key+'">هزینه کل: '+fmt(cost.coins)+' پول</small><button class="btn primary" data-recruit="'+key+'">افزودن به کشور</button>'+imageButton+removeButton+'</article>';
+  return '<article class="game-card">'+img+'<b>'+esc(x.name)+'</b><small>'+esc(x.categoryName||"سامانه پایه")+'</small><small>موجودی: '+fmt(d.units[key])+' عدد</small><small>هزینه هر بسته: '+fmt(cost.coins)+' پول • '+fmt(cost.steel)+' فولاد • '+fmt(cost.food)+' غذا • '+fmt(cost.energy)+' برق • '+fmt(cost.oil)+' نفت</small><div class="row"><input class="field" type="number" min="1" max="1000000" step="1" value="1" inputmode="numeric" data-batches="'+key+'" style="min-width:0;width:100px"><button class="btn" type="button" data-max="'+key+'" style="flex:0 0 auto">MAX</button></div><small data-total="'+key+'">هزینه کل: '+fmt(cost.coins)+' پول</small><button class="btn primary" data-recruit="'+key+'">افزودن به کشور</button>'+removeButton+'</article>';
  }).join("")+(visible.length<filtered.length?'<button class="btn army-more" id="armyMore">نمایش مدل‌های بیشتر ('+(filtered.length-visible.length)+')</button>':"")||'<div class="panel">مدلی با این جست‌وجو پیدا نشد</div>';
  $("armyUnits").querySelectorAll("[data-batches]").forEach(input=>{
   const key=input.dataset.batches,x=catalog[key],cost=x.cost||{};
@@ -274,20 +273,6 @@ function renderArmyCatalog(d){
   const input=$("armyUnits").querySelector('[data-batches="'+key+'"]');
   if(max<1){input.value=1;input.dispatchEvent(new Event("input"));toast("منابع کافی برای این مدل نداری");return}
   input.value=max;input.dispatchEvent(new Event("input"));
- });
- $("armyUnits").querySelectorAll("[data-save-unit-image]").forEach(btn=>btn.onclick=async()=>{
-  if(!OWNER_IDS.has(String(me?.telegram_id)))return;
-  const key=btn.dataset.saveUnitImage,file=$("armyUnits").querySelector('[data-unit-image="'+key+'"]')?.files?.[0];
-  if(!file)return toast("برای این مدل یک عکس انتخاب کن");
-  if(!["image/png","image/jpeg","image/webp"].includes(file.type)||file.size>4500000)return toast("عکس باید PNG، JPG یا WEBP و کمتر از ۴.۵ مگابایت باشد");
-  btn.disabled=true;
-  try{
-   const bitmap=await createImageBitmap(file),scale=Math.min(1,1000/Math.max(bitmap.width,bitmap.height)),canvas=document.createElement("canvas");
-   canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));
-   canvas.getContext("2d").drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close?.();
-   const result=await api("owner/unit-catalog/"+encodeURIComponent(key)+"/image",{imageUrl:canvas.toDataURL("image/jpeg",0.78)});
-   if(result.ok){toast("عکس مدل ذخیره شد");await loadArmy()}else toast(result.error||"ذخیره عکس ناموفق بود");
-  }catch(e){toast("خواندن عکس ناموفق بود")}finally{btn.disabled=false}
  });
  $("armyUnits").querySelectorAll("[data-delete-unit]").forEach(btn=>btn.onclick=async()=>{
   if(!OWNER_IDS.has(String(me?.telegram_id)))return;
