@@ -20,6 +20,7 @@ if ((css.match(/{/g) || []).length !== (css.match(/}/g) || []).length) throw new
 if (!html.includes("battleBriefing") || !html.includes("updateBattleBriefing") || !html.includes("battleBriefingComposition")) throw new Error("Live battle deployment briefing is missing.");
 if (!html.includes("battleCinematic") || !html.includes("showBattleCinematic") || !html.includes("battleResultBanner") || !html.includes("battleArena")) throw new Error("Cinematic battle result experience is missing.");
 if (!html.includes("battleMapZoomIn") || !html.includes("zoomBattleMap") || !html.includes("battleMapDragged")) throw new Error("Interactive battle map navigation is missing.");
+if (!server.includes("countries-10m.json") || !html.includes("WORLD ATLAS") || !html.includes("data-map-layer") || !html.includes("landFree")) throw new Error("Detailed atlas overhaul or map layer controls are missing.");
 const runCheck = (file) => {
   const result = spawnSync(process.execPath, ["--check", file], { encoding: "utf8" });
   if (result.status !== 0) throw new Error(result.stderr || result.stdout || "Syntax check failed: " + file);
@@ -56,7 +57,7 @@ if (!server.includes("function pointInCountry(code,lng,lat)") || !server.include
 if (!server.includes("const sectorLat=Number(sectorInput.lat),sectorLng=Number(sectorInput.lng);") || !server.includes("pointInCountry(defenderCountry,sectorLng,sectorLat)")) throw new Error("Battle sector coordinates must be initialized before border validation.");
 if (!server.includes("const qty=Number(raw);al[type]=qty;await client.query") || !server.includes("quantity=quantity-$1 WHERE telegram_id=$2 AND unit_type=$3 AND quantity>=$1")) throw new Error("Every dispatched attacker unit must be consumed exactly once.");
 if (!html.includes('id="territoryGrid"') || !html.includes("شبکهٔ ربع‌درجه‌ای مناطق")) throw new Error("Quarter-degree war region grid display is missing.");
-if (!server.includes('world-atlas/countries-50m.json') || !server.includes("Math.floor((sectorLng+180)*4),sectorY=Math.floor((sectorLat+90)*4)") || !html.includes("Math.floor((lng+180)*4),gy=Math.floor((lat+90)*4)")) throw new Error("Higher-detail country geometry or one-degree selectable regions are missing.");
+if (!server.includes('world-atlas/countries-10m.json') || !server.includes("Math.floor((sectorLng+180)*4),sectorY=Math.floor((sectorLat+90)*4)") || !html.includes("Math.floor((lng+180)*4),gy=Math.floor((lat+90)*4)")) throw new Error("Higher-detail country geometry or one-degree selectable regions are missing.");
 if (!html.includes("هر منطقهٔ تصرف‌شده ۱٪ به تولید پول و منابع اضافه می‌کند")) throw new Error("Territory production bonus is not explained in the battle map UI.");
 if (!html.includes("selectedBattleSector.targetId!==target_id")) throw new Error("Battle target must match the selected map region.");
 
