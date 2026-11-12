@@ -98,7 +98,8 @@ async function initDb() {
       energy BIGINT NOT NULL DEFAULT 0, oil BIGINT NOT NULL DEFAULT 0, power BIGINT NOT NULL DEFAULT 1,
       created_by BIGINT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
-    CREATE TABLE IF NOT EXISTS national_buildings (
+
+    await pool.query("DELETE FROM military_units WHERE left(unit_type,6)='asset_'");    CREATE TABLE IF NOT EXISTS national_buildings (
       telegram_id BIGINT NOT NULL REFERENCES players(telegram_id) ON DELETE CASCADE,
       building_type TEXT NOT NULL, level INT NOT NULL DEFAULT 0,
       PRIMARY KEY(telegram_id,building_type)
@@ -260,6 +261,20 @@ app.post("/api/owner/unit-catalog",auth,ownerOnly,async(req,res)=>{
   await pool.query("INSERT INTO custom_unit_catalog(unit_type,name,category,category_name,icon,image_url,quantity,coins,steel,food,energy,oil,power,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)",[key,name,category,categoryNames[category],icon,imageUrl,quantity,cost.coins,cost.steel,cost.food,cost.energy,cost.oil,power,String(req.user.id)]);
   res.json({ok:true,type:key});
 });
+app.delete("/api/owner/unit-catalog/:type",auth,ownerOnly,async(req,res)=>{
+  const type=String(req.params.type||"");
+  if(!/^custom_[a-f0-9]{16}$/.test(type))return res.status(400).json({ok:false,error:"فقط مدل‌های سفارشی قابل حذف هستند."});
+  const client=await pool.connect();
+  try{
+    await client.query("BEGIN");
+    const found=await client.query("SELECT unit_type,name FROM custom_unit_catalog WHERE unit_type=$1 FOR UPDATE",[type]);
+    if(!found.rowCount){await client.query("ROLLBACK");return res.status(404).json({ok:false,error:"مدل پیدا نشد."})}
+    await client.query("DELETE FROM military_units WHERE unit_type=$1",[type]);
+    await client.query("DELETE FROM custom_unit_catalog WHERE unit_type=$1",[type]);
+    await client.query("COMMIT");
+    res.json({ok:true,name:found.rows[0].name});
+  }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
+});
 app.get("/api/owner/players",auth,ownerOnly,async(_req,res)=>{
   const q=await pool.query("SELECT telegram_id,first_name,username,country_name,country_code,country_flag,created_at FROM players WHERE country_code IS NOT NULL ORDER BY country_name,first_name LIMIT 500");
   res.set("Cache-Control","no-store").json({ok:true,players:q.rows});
@@ -302,23 +317,6 @@ const UNIT_CATALOG = {
   air:{name:"یگان هوایی",icon:"✈️",quantity:5,cost:{coins:1250000,steel:90,food:15,energy:100,oil:110},power:260},
   navy:{name:"ناوگان دریایی",icon:"🚢",quantity:3,cost:{coins:1100000,steel:140,food:20,energy:65,oil:95},power:230}
 };
-const SUPPORT_CATEGORIES = [
-  {id:"logistics",name:"ترابری و زنجیره تأمین",icon:"🚚",models:["مرکز توزیع منطقه‌ای","سامانه باربری هوشمند","پایانه چندوجهی","انبار خودکار","ناوگان حمل‌ونقل پاک","سامانه رهگیری محموله","مرکز مدیریت موجودی","شبکه سردخانه‌ای","ایستگاه بارگیری سریع","سامانه زمان‌بندی مسیر"]},
-  {id:"engineering",name:"مهندسی و زیرساخت",icon:"🏗️",models:["پل ماژولار شهری","واحد تعمیر زیرساخت","سامانه پایش پل‌ها","مرکز بازسازی راه","کارگاه سازه پیش‌ساخته","شبکه نگهداری جاده","واحد نقشه‌برداری","مرکز مدیریت پروژه","سامانه بازرسی سازه","پایگاه خدمات عمرانی"]},
-  {id:"medical",name:"پزشکی و سلامت",icon:"🏥",models:["درمانگاه سیار","مرکز تله‌مدیسین","آزمایشگاه تشخیص سریع","واحد سلامت عمومی","سامانه پرونده سلامت","مرکز واکسیناسیون","بیمارستان ماژولار","واحد پشتیبانی دارویی","مرکز توان‌بخشی","شبکه امداد پزشکی"]},
-  {id:"communications",name:"ارتباطات و هماهنگی",icon:"📡",models:["شبکه ارتباطی امن","مرکز هماهنگی منطقه‌ای","سامانه پیام‌رسان اضطراری","ایستگاه ارتباط ماهواره‌ای","مرکز داده پشتیبان","شبکه فیبر نوری","سامانه هشدار عمومی","مرکز مدیریت تماس","گره ارتباطی سیار","سامانه همگام‌سازی اطلاعات"]},
-  {id:"energy",name:"انرژی و خدمات شهری",icon:"⚡",models:["میکروشبکه خورشیدی","واحد ذخیره انرژی","نیروگاه بادی محلی","سامانه مدیریت مصرف","ایستگاه شارژ عمومی","مرکز تعمیر شبکه برق","واحد بازیافت انرژی","شبکه توزیع هوشمند","سامانه پایش آب","تصفیه‌خانه ماژولار"]},
-  {id:"agriculture",name:"کشاورزی و غذا",icon:"🌱",models:["گلخانه هوشمند","مزرعه عمودی","مرکز بذر منطقه‌ای","سامانه آبیاری دقیق","واحد ذخیره غلات","کارخانه فرآوری غذا","شبکه توزیع محصولات","آزمایشگاه خاک","مرکز کنترل کیفیت غذا","سامانه پیش‌بینی برداشت"]},
-  {id:"research",name:"علم و فناوری",icon:"🔬",models:["آزمایشگاه مواد نو","مرکز پژوهش اقلیم","واحد رباتیک خدماتی","مرکز تحلیل داده","آزمایشگاه زیست‌فناوری","مرکز آموزش فنی","سامانه شبیه‌سازی شهری","واحد سنجش محیطی","مرکز نوآوری صنعتی","آزمایشگاه انرژی پاک"]},
-  {id:"rescue",name:"امداد و حفاظت شهری",icon:"🛟",models:["مرکز مدیریت بحران","واحد آتش‌نشانی شهری","سامانه پایش سیل","مرکز تخلیه اضطراری","واحد جست‌وجو و نجات","پناهگاه ماژولار","سامانه هشدار زلزله","مرکز اسکان موقت","واحد پاک‌سازی محیط","شبکه داوطلبان امداد"]}
-];
-const SUPPORT_SUFFIXES = ["نسل ۱","نسل ۲","نسل ۳","نسل ۴","نسل ۵"];
-const SUPPORT_CATALOG = Object.fromEntries(SUPPORT_CATEGORIES.flatMap(cat=>cat.models.flatMap((base,mi)=>SUPPORT_SUFFIXES.map((suffix,si)=>{
-  const n=mi*5+si+1;
-  const key="asset_"+cat.id+"_"+String(n).padStart(2,"0");
-  return [key,{name:base+" "+suffix,icon:cat.icon,category:cat.id,categoryName:cat.name,quantity:1,power:12+n*2,cost:{coins:140000+n*42000,steel:8+n*2,food:8+n,energy:5+Math.floor(n/2),oil:2+Math.floor(n/3)}}];
-}))));
-Object.assign(UNIT_CATALOG,SUPPORT_CATALOG);
 const BUILDING_CATALOG = {
   power:{name:"نیروگاه برق",icon:"⚡",cost:{coins:650000,steel:90,oil:35,energy:0},production:{energy:30},output:"تولید ۳۰ برق در ساعت"},
   solar:{name:"مزرعه خورشیدی",icon:"☀️",cost:{coins:520000,steel:65,oil:0,energy:0},production:{energy:22},output:"تولید ۲۲ برق در ساعت"},
