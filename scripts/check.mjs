@@ -44,6 +44,8 @@ if (!server.includes("territoryBoost=1+Math.min(0.20") || !server.includes("coin
 if (!server.includes("منطقهٔ انتخابی را تصرف کرد") || !server.includes("منطقه حفظ شد")) throw new Error("Territorial battle result messages are missing.");
 if (!html.includes("function pointInMapFeature") || !html.includes("selectedBattleSector") || !html.includes("sector:{lat:selectedBattleSector.lat,lng:selectedBattleSector.lng}") || !html.includes('clip-path="url(#clip-')) throw new Error("Clickable map-region selection or ownership overlay is missing.");
 if (!server.includes("function pointInCountry(code,lng,lat)") || !server.includes("pointInCountry(defenderCountry,sectorLng,sectorLat)")) throw new Error("Server-side battle region border validation is missing.");
+if (!server.includes("const sectorLat=Number(sectorInput.lat),sectorLng=Number(sectorInput.lng);") || !server.includes("pointInCountry(defenderCountry,sectorLng,sectorLat)")) throw new Error("Battle sector coordinates must be initialized before border validation.");
+if (!server.includes("const qty=Number(raw);al[type]=qty;await client.query") || !server.includes("quantity=quantity-$1 WHERE telegram_id=$2 AND unit_type=$3 AND quantity>=$1")) throw new Error("Every dispatched attacker unit must be consumed exactly once.");
 if (!html.includes('id="territoryGrid"') || !html.includes("تقسیم‌بندی مناطق جنگی") || !html.includes("تقسیم‌بندی")) throw new Error("Active war region grid display is missing.");
 if (!html.includes("هر منطقهٔ تصرف‌شده ۱٪ به تولید پول و منابع اضافه می‌کند")) throw new Error("Territory production bonus is not explained in the battle map UI.");
 if (!html.includes("selectedBattleSector.targetId!==target_id")) throw new Error("Battle target must match the selected map region.");
