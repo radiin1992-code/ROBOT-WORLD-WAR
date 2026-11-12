@@ -46,7 +46,7 @@ if (!server.includes("coins=Math.floor(coins*territoryBoost*coinTradeMultiplier)
 if (!html.includes('id="straitGrid"') || !html.includes("function loadStraits") || !html.includes("بستن کامل تنگه")) throw new Error("Strait management UI is missing.");
 
 if (!server.includes("sectorInput=req.body?.sector") || !server.includes("ON CONFLICT(sector_key) DO UPDATE SET owner_id=EXCLUDED.owner_id")) throw new Error("Battle sector validation or capture persistence is missing.");
-if (!server.includes("territoryBoost=1+Math.min(0.20") || !server.includes("coins=Math.floor(coins*territoryBoost)") || !server.includes("territoryBoost*(1+Number(tech.industry")) throw new Error("Captured territory production bonus is missing.");
+if (!server.includes("territoryBoost=1+Math.min(0.20") || !server.includes("coins=Math.floor(coins*territoryBoost*coinTradeMultiplier)") || !server.includes("territoryBoost*(1+Number(tech.industry")) throw new Error("Captured territory production bonus is missing.");
 if (!server.includes("منطقهٔ انتخابی را تصرف کرد") || !server.includes("منطقه حفظ شد")) throw new Error("Territorial battle result messages are missing.");
 if (!html.includes("function pointInMapFeature") || !html.includes("selectedBattleSector") || !html.includes("sector:{lat:selectedBattleSector.lat,lng:selectedBattleSector.lng}") || !html.includes('clip-path="url(#clip-')) throw new Error("Clickable map-region selection or ownership overlay is missing.");
 if (!server.includes("function pointInCountry(code,lng,lat)") || !server.includes("pointInCountry(defenderCountry,sectorLng,sectorLat)")) throw new Error("Server-side battle region border validation is missing.");
