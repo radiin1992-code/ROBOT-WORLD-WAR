@@ -53,7 +53,7 @@ button,.panel,.item,.stat,.post,.view-banner{transition:transform .16s ease,bord
 .globe-shell{height:min(76svh,760px);min-height:500px;background:#061522;isolation:isolate;touch-action:pan-y}.world-map-svg{display:block;width:100%;height:100%;touch-action:none;cursor:grab;background:#061522}.world-map-svg:active{cursor:grabbing}.map-graticule path{fill:none;stroke:#8ec6d8;stroke-opacity:.13;stroke-width:1}.world-country{stroke:#d2e8ed;stroke-width:1.05;stroke-linejoin:round;vector-effect:non-scaling-stroke;cursor:pointer;transition:fill .15s,filter .15s}.world-country.free{fill:url(#land)}.world-country.held{fill:#a56b55}.world-country.own{fill:#e3bd68;filter:url(#landGlow)}.world-country:hover{fill:#e5d39b;filter:url(#landGlow)}.map-label{font-size:10px;fill:#fff4d2;text-anchor:middle;paint-order:stroke;stroke:#102033;stroke-width:3px;stroke-linejoin:round;pointer-events:none}.map-zoom{position:absolute;z-index:4;left:12px;top:12px;display:grid;gap:7px}.map-zoom button{width:38px;height:38px;border-radius:12px;border:1px solid #cba65b88;background:#101c2ddd;color:#f7d990;font-size:23px;font-weight:900;backdrop-filter:blur(8px)}.globe-shell{position:relative;overflow:hidden;min-height:520px;height:min(78svh,780px);border-radius:22px;border:1px solid #45617e;background:radial-gradient(ellipse at 50% 45%,#102d46,#030810 72%);touch-action:none;box-shadow:inset 0 0 55px #2878a522,0 18px 45px #0006}.globe-shell canvas{display:block;width:100%!important;height:100%!important;touch-action:none;outline:none}.globe-loading{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:#eaf4ff;text-align:center;background:radial-gradient(ellipse at 50% 45%,#15334d,#030810 72%);font-size:13px}.globe-loading span{font-size:48px;filter:drop-shadow(0 0 18px #5fcfff88)}.globe-loading small{color:#9fb4cb;font-size:10px}.globe-loading .btn{margin-top:8px}.globe-hint{position:absolute;z-index:3;bottom:12px;left:50%;transform:translateX(-50%);white-space:nowrap;max-width:90%;overflow:hidden;text-overflow:ellipsis;padding:8px 13px;border:1px solid #ffffff24;border-radius:30px;background:#071321c9;color:#d8e8f5;font-size:10px;pointer-events:none;backdrop-filter:blur(10px)}.map-zoom{z-index:4}.news-item.expanded{border-color:#d8b66b;background:linear-gradient(110deg,#26354a,#121d2c)}@media(max-width:600px){.globe-shell{height:70svh;min-height:440px;border-radius:18px}.map-label{font-size:9px}}
 #bootScreen{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px;background:radial-gradient(ellipse at 50% 35%,#1a3555 0,#0b1423 52%,#070b13 100%)}#bootScreen.hide{display:none!important}.boot-card{width:min(100%,340px);padding:28px 22px;border:1px solid #526486;border-radius:24px;background:linear-gradient(145deg,#18263d,#0a101c);text-align:center;box-shadow:0 20px 60px #0008}.boot-mark{font-size:42px}.boot-title{font-size:20px;font-weight:900;color:#f5d58e}.boot-copy{font-size:13px;color:#aab9d0;margin-top:8px}.boot-spinner{width:34px;height:34px;border:3px solid #34445f;border-top-color:#f5c86d;border-radius:50%;margin:18px auto 0;animation:bootspin .7s linear infinite}@keyframes bootspin{to{transform:rotate(360deg)}}
 .unit-category-tabs{display:flex;gap:7px;overflow-x:auto;padding:5px 0 12px;scrollbar-width:thin}.unit-category-tabs button{flex:0 0 auto;border:1px solid #46546c;border-radius:12px;background:#111c2c;color:#c4d0e2;padding:9px 12px;font-size:10px;font-weight:800}.unit-category-tabs button.active{background:linear-gradient(120deg,#e6c16f,#9c7439);border-color:#f6dc9c;color:#241a0a}.unit-model{min-width:0}.unit-model .cost{color:#80dfae}.unit-model small{overflow-wrap:anywhere}
-</style></head><body><div id='bootScreen'><div class='boot-card'><div class='boot-mark'>💥</div><div class='boot-title'>radinwar</div><div class='boot-copy'>در حال اتصال به جهان بازی…</div><div class='boot-spinner'></div></div></div>
+#shopGrid .shop-quantity-row{display:grid;grid-template-columns:1fr auto;gap:7px;align-items:center;margin:9px 0}#shopGrid .shop-quantity-row label{font-size:10px;color:#d8e1ef}#shopGrid .shop-quantity-row .field{margin:0;min-width:0}#shopGrid .shop-max{padding:9px 13px;color:#241a0a;background:linear-gradient(120deg,#f5d98d,#b78d48);border:0}#shopGrid [data-total]{color:#f4d58f}#shopGrid [data-receive]{color:#a9d9ee}#shopGrid [data-buy]:disabled{opacity:.48;filter:saturate(.5);cursor:not-allowed}</style></head><body><div id='bootScreen'><div class='boot-card'><div class='boot-mark'>💥</div><div class='boot-title'>radinwar</div><div class='boot-copy'>در حال اتصال به جهان بازی…</div><div class='boot-spinner'></div></div></div>
 <header id="appHeader"><div class="logo">🌐 <i>radinwar💥</i></div><div class="user"><span id="userName">فرمانده</span><div class="orb">♛</div></div></header>
 <main>
 <section id="countryScreen" class="country-screen hide"><div class="country-intro"><div class="country-brand">🌍 radinwar💥</div><h1>فرماندهی جهان از اینجا شروع میشه</h1><p>یک کشور آزاد انتخاب کن. هر کشور فقط یک فرمانده داره و بعد از انتخاب، دیگه قابل تغییر نیست.</p><div class="intro-pills"><span>💰 سرمایه آغازین: ۱۰ میلیون</span><span>🛡️ انتخاب فقط یک‌بار</span></div></div><input id="countrySearch" class="search" placeholder="🔎 جست‌وجوی کشور..." autocomplete="off"><div id="countryList" class="country-list"><div class="loading-card">در حال آماده‌سازی نقشه و کشورها…</div></div><div class="country-rules"><b>📜 قبل از شروع</b><p>۱. با انتخاب کشور، مالکیتت ثبت میشه و قابل عوض کردن نیست.</p><p>۲. همه بازیکن‌ها از ۱۰ میلیون پول شروع می‌کنن.</p><p>۳. اقتصاد و زیرساخت رو بساز، با بقیه مذاکره کن و رویدادهای بازی رو دنبال کن.</p><p>۴. خبرهای ساختگی به‌عنوان واقعیت نمایش داده نمی‌شن؛ رویدادهای شبیه‌سازی‌شده برچسب دارن.</p></div></section>
@@ -191,34 +191,38 @@ async function renderWorldMap(){
 async function drawGlobe(){if(!geo){await loadGeo();if(!geo)return}await renderWorldMap()}
 async function loadProfile(){const d=await api('profile');if(!d.ok)return false;me=d.profile;$('userName').textContent=me.first_name||'فرمانده';$('ownerTools')?.classList.toggle('hide',String(me.telegram_id)!==OWNER_ID);if(String(me.telegram_id)===OWNER_ID)loadOwnerPlayers();if(!me.country_code){$('countryScreen').classList.remove('hide');$('lobby').classList.add('hide');$('appHeader').classList.add('hide');return true}$('countryScreen').classList.add('hide');$('lobby').classList.remove('hide');$('appHeader').classList.remove('hide');$('welcome').textContent=me.country_name+' — فرماندهی';$('countryName').textContent=me.country_name;$('countryHero').style.setProperty('--hero-image',"url('https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=1400&q=90')");$('armyPower').textContent=Number(me.military_power||0).toLocaleString('en-US');$('energyValue').textContent=Number(me.energy||0).toLocaleString('en-US');$('coins').textContent=Number(me.coins).toLocaleString('en-US');$('level').textContent=me.level;$('income').textContent=Number(me.income||0).toLocaleString('en-US');renderEconomy();loadShop();loadAnnouncements();loadGroups();loadPlayers();loadNews();if(geo)drawGlobe();return true}
 function renderEconomy(){const names=[['oil','🛢️','نفت'],['steel','🔩','فولاد'],['food','🌾','غذا'],['energy','⚡','انرژی']];$('resourceGrid').innerHTML=names.map(([k,i,n])=>'<div class="resource-chip"><span>'+i+'</span><small>'+n+'</small><b>'+Number(me[k]||0).toLocaleString('en-US')+'</b></div>').join('');$('economyGrid').innerHTML='<div class="item"><b>💰 خزانه ملی</b><small>'+Number(me.coins).toLocaleString('en-US')+' پول</small></div>'+names.map(([k,i,n])=>'<div class="item"><b>'+i+' '+n+'</b><small>'+Number(me[k]||0).toLocaleString('en-US')+' واحد</small></div>').join('')}
-let shopCooldownEndsAt=0,shopCooldownTicker=null,shopPurchasePending=false;
-function updateShopCooldown(seconds){
- shopCooldownEndsAt=Date.now()+Math.max(0,Number(seconds)||0)*1000;
- if(shopCooldownTicker)clearInterval(shopCooldownTicker);
- const tick=()=>{
-  const left=Math.max(0,Math.ceil((shopCooldownEndsAt-Date.now())/1000));
-  document.querySelectorAll("#shopGrid [data-buy]").forEach(b=>{
-   b.disabled=left>0||shopPurchasePending||b.dataset.pending==="1";
-   b.textContent=left>0?("⏳ "+Math.floor(left/60)+":"+String(left%60).padStart(2,"0")):(b.dataset.pending==="1"?"در حال خرید...":"خرید");
-  });
-  const badge=$("shopCooldownStatus");
-  if(badge)badge.textContent=shopPurchasePending?"در حال ثبت خرید...":left>0?("⏳ زمان باقی‌مانده برای تمام خریدها: "+Math.floor(left/60)+":"+String(left%60).padStart(2,"0")):"✅ خریدها آزاد هستند";
-  if(left<=0&&shopCooldownTicker){clearInterval(shopCooldownTicker);shopCooldownTicker=null}
- };
- tick();if(seconds>0)shopCooldownTicker=setInterval(tick,250);
+let shopPurchasePending=false,shopItems=[];
+function updateShopCard(card,item){
+ const input=card.querySelector("[data-quantity]"),qty=Math.max(0,Math.floor(Number(input.value)||0));
+ const max=Math.max(0,Math.floor(Number(me?.coins||0)/item.price));
+ const totalPrice=qty*item.price,totalAmount=qty*item.amount,totalIncome=qty*item.incomeBonus;
+ card.querySelector("[data-max]").disabled=max<1||shopPurchasePending;
+ card.querySelector("[data-total]").innerHTML='جمع خرید: <b>'+totalPrice.toLocaleString("en-US")+'</b> پول';
+ card.querySelector("[data-receive]").textContent='دریافت نهایی: '+totalAmount.toLocaleString("en-US")+' واحد';
+ card.querySelector("[data-income-total]").textContent='افزایش درآمد: +'+totalIncome.toLocaleString("en-US")+' پول در ثانیه';
+ const buy=card.querySelector("[data-buy]");
+ buy.disabled=shopPurchasePending||qty<1||qty>max;
+ buy.textContent=shopPurchasePending?"در حال خرید...":(qty>max?"پول کافی نیست":"خرید "+qty.toLocaleString("en-US")+" عدد");
 }
 async function loadShop(){
  const d=await api("shop");if(!d.ok)return;
- $("shopGrid").innerHTML='<div id="shopCooldownStatus" class="shop-cooldown-status"></div>'+d.items.map(x=>'<div class="item"><span class="icon">'+x.icon+'</span><b>'+x.name+'</b><small>دریافت: '+x.amount+' واحد</small><small class="price">قیمت خرید: '+x.price.toLocaleString("en-US")+' پول</small><small class="cost">افزایش درآمد: +'+Number(x.incomeBonus||0).toLocaleString("en-US")+' پول در ثانیه</small><button class="btn primary" data-buy="'+x.id+'">خرید</button></div>').join("");
- updateShopCooldown(d.cooldownSeconds||0);
- $("shopGrid").querySelectorAll("[data-buy]").forEach(b=>b.onclick=async()=>{
-  if(Date.now()<shopCooldownEndsAt)return;
-  shopPurchasePending=true;b.dataset.pending="1";updateShopCooldown(0);b.disabled=true;b.textContent="در حال خرید...";
-  const z=await api("shop/buy",{item:b.dataset.buy});
-  b.dataset.pending="0";shopPurchasePending=false;
-  if(z.ok){toast("خرید انجام شد؛ همه خریدها تا ۱۰ دقیقه قفل شدند");updateShopCooldown(z.cooldownSeconds||600);await loadProfile()}
-  else if(z.cooldownSeconds){updateShopCooldown(z.cooldownSeconds)}
-  else {updateShopCooldown(0)}
+ shopItems=d.items||[];
+ $("shopGrid").innerHTML=shopItems.map(x=>'<div class="item shop-item" data-shop-id="'+x.id+'"><span class="icon">'+x.icon+'</span><b>'+x.name+'</b><small>مقدار هر عدد: '+x.amount.toLocaleString("en-US")+' واحد</small><small class="price">قیمت هر عدد: '+x.price.toLocaleString("en-US")+' پول</small><small class="cost">درآمد هر عدد: +'+Number(x.incomeBonus||0).toLocaleString("en-US")+' پول در ثانیه</small><div class="shop-quantity-row"><label>تعداد خرید</label><input class="field" type="number" min="1" max="1000000" step="1" inputmode="numeric" value="1" data-quantity><button class="btn shop-max" type="button" data-max>MAX</button></div><small data-receive>دریافت نهایی: '+x.amount+' واحد</small><small data-total>جمع خرید: '+x.price.toLocaleString("en-US")+' پول</small><small class="cost" data-income-total>افزایش درآمد: +'+Number(x.incomeBonus||0).toLocaleString("en-US")+' پول در ثانیه</small><button class="btn primary" data-buy>خرید ۱ عدد</button></div>').join("");
+ $("shopGrid").querySelectorAll(".shop-item").forEach(card=>{
+  const item=shopItems.find(x=>x.id===card.dataset.shopId);
+  card.querySelector("[data-quantity]").addEventListener("input",()=>updateShopCard(card,item));
+  card.querySelector("[data-max]").onclick=()=>{const max=Math.max(0,Math.floor(Number(me?.coins||0)/item.price));card.querySelector("[data-quantity]").value=max;updateShopCard(card,item)};
+  card.querySelector("[data-buy]").onclick=async()=>{
+   const quantity=Math.floor(Number(card.querySelector("[data-quantity]").value)||0);
+   const max=Math.floor(Number(me?.coins||0)/item.price);
+   if(quantity<1||quantity>max){toast("تعداد انتخابی بیشتر از توان مالیته");return}
+   shopPurchasePending=true;$("shopGrid").querySelectorAll(".shop-item").forEach(c=>{const it=shopItems.find(x=>x.id===c.dataset.shopId);updateShopCard(c,it)});
+   const z=await api("shop/buy",{item:item.id,quantity});
+   shopPurchasePending=false;
+   if(z.ok){toast("خرید "+quantity.toLocaleString("en-US")+" عدد انجام شد؛ درآمدت افزایش یافت");await loadProfile()}
+   else {toast(z.error||"خرید انجام نشد");$("shopGrid").querySelectorAll(".shop-item").forEach(c=>{const it=shopItems.find(x=>x.id===c.dataset.shopId);updateShopCard(c,it)})}
+  };
+  updateShopCard(card,item);
  });
 }
 
