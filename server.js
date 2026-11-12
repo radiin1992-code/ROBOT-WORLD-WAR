@@ -261,7 +261,7 @@ app.post("/api/owner/unit-catalog",auth,ownerOnly,async(req,res)=>{
   await pool.query("INSERT INTO custom_unit_catalog(unit_type,name,category,category_name,icon,image_url,quantity,coins,steel,food,energy,oil,power,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)",[key,name,category,categoryNames[category],icon,imageUrl,quantity,cost.coins,cost.steel,cost.food,cost.energy,cost.oil,power,String(req.user.id)]);
   res.json({ok:true,type:key});
 });
-app.delete("/api/owner/unit-catalog/:type",auth,ownerOnly,async(req,res)=>{
+app.post("/api/owner/unit-catalog/:type/delete",auth,ownerOnly,async(req,res)=>{
   const type=String(req.params.type||"");
   if(!/^custom_[a-f0-9]{16}$/.test(type))return res.status(400).json({ok:false,error:"فقط مدل‌های سفارشی قابل حذف هستند."});
   const client=await pool.connect();
