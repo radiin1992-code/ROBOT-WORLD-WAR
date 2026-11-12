@@ -28,7 +28,7 @@ if (!systems.includes("/api/player-market") || !systems.includes("/api/research"
 for (const tech of ["industry","energy","agriculture","materials","intelligence","logistics","military","aviation","defense"]) if (!systems.includes(`id:"${tech}"`)) throw new Error("Technology missing: " + tech);
 if (!server.includes("attackerTech.military") || !server.includes("attackerTech.aviation") || !server.includes("defenderTech.defense")) throw new Error("Combat technologies are not applied to battle calculations.");
 const catalogStart = server.indexOf("const BUILDING_CATALOG = {");
-const catalogEnd = server.indexOf("\n};\n\nconst BUILDING_RESOURCE_OUTPUTS", catalogStart);
+const catalogEnd = server.indexOf("\n};", catalogStart);
 const ratesStart = server.indexOf("const BUILDING_RESOURCE_OUTPUTS = ") + "const BUILDING_RESOURCE_OUTPUTS = ".length;
 const ratesEnd = server.indexOf(";\nfor", ratesStart);
 if (catalogStart < 0 || catalogEnd < 0 || ratesStart < 0 || ratesEnd < 0) throw new Error("Building production catalog is missing.");
