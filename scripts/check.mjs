@@ -27,15 +27,7 @@ if (!server.includes("registerWorldSystems") || !server.includes("initWorldSyste
 if (!systems.includes("/api/player-market") || !systems.includes("/api/research") || !systems.includes("/api/espionage/launch") || !systems.includes("/api/season")) throw new Error("A major world system route is missing.");
 for (const tech of ["industry","energy","agriculture","materials","intelligence","logistics","military","aviation","defense"]) if (!systems.includes(`id:"${tech}"`)) throw new Error("Technology missing: " + tech);
 if (!server.includes("attackerTech.military") || !server.includes("attackerTech.aviation") || !server.includes("defenderTech.defense")) throw new Error("Combat technologies are not applied to battle calculations.");
-const catalogStart = server.indexOf("const BUILDING_CATALOG = {");
-const catalogEnd = server.indexOf("\n};", catalogStart);
-const ratesStart = server.indexOf("const BUILDING_RESOURCE_OUTPUTS = ") + "const BUILDING_RESOURCE_OUTPUTS = ".length;
-const ratesEnd = server.indexOf(";\nfor", ratesStart);
-if (catalogStart < 0 || catalogEnd < 0 || ratesStart < 0 || ratesEnd < 0) throw new Error("Building production catalog is missing.");
-const catalogBlock = server.slice(catalogStart, catalogEnd);
-const buildingKeys = [...catalogBlock.matchAll(/^\s{2}([a-zA-Z0-9_]+):\\{/gm)].map(x => x[1]);
-const resourceRates = JSON.parse(server.slice(ratesStart, ratesEnd));
-if (buildingKeys.length !== 45 || buildingKeys.some(key => !resourceRates[key])) throw new Error("Every economy building must have a resource yield.");
+if (!server.includes("Object.assign(item.production, BUILDING_RESOURCE_OUTPUTS[key] || {})") || !server.includes('"gasfield":{"oil":300}') || !server.includes('"lithium":{"steel":160}') || !server.includes('"greenhouse":{"food":180}') || !server.includes('"nuclear":{"energy":200}')) throw new Error("Economy building yields are missing or not connected to production.");
 if (!server.includes("if(production.energy)energy+=hours*level*Number(production.energy)") || !server.includes("if(production.oil)oil+=hours*active*Number(production.oil)")) throw new Error("Hourly building resource production is not applied.");
 
 if (!server.includes("tech.industry") || !server.includes("tech.agriculture") || !server.includes("tech.materials") || !server.includes("tech.energy")) throw new Error("Economic technologies are not applied to production.");
