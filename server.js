@@ -80,7 +80,7 @@ async function initDb() {
     );
     CREATE TABLE IF NOT EXISTS transactions (
       id BIGSERIAL PRIMARY KEY, telegram_id BIGINT NOT NULL, kind TEXT NOT NULL,
-      resource TEXT NOT NULL, amount BIGINT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      resource TEXT NOT NULL, amount NUMERIC NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
     CREATE TABLE IF NOT EXISTS upgrades (
       telegram_id BIGINT NOT NULL, kind TEXT NOT NULL, level INT NOT NULL DEFAULT 1,
@@ -136,6 +136,7 @@ async function initDb() {
   await pool.query("ALTER TABLE players ADD COLUMN IF NOT EXISTS country_flag TEXT");
   await pool.query("ALTER TABLE players ADD COLUMN IF NOT EXISTS production_at TIMESTAMPTZ NOT NULL DEFAULT NOW()");
   await pool.query("ALTER TABLE players ADD COLUMN IF NOT EXISTS shop_income BIGINT NOT NULL DEFAULT 0");
+  await pool.query("ALTER TABLE transactions ALTER COLUMN amount TYPE NUMERIC USING amount::numeric");
   await pool.query(`ALTER TABLE players
     ALTER COLUMN coins TYPE NUMERIC USING coins::numeric,
     ALTER COLUMN oil TYPE NUMERIC USING oil::numeric,
@@ -778,7 +779,7 @@ app.post("/api/shop/buy",auth,async(req,res)=>{
     if(!state.rowCount||!state.rows[0].country_code)return res.status(400).json({ok:false,error:"اول باید کشور انتخاب کنی."});
     return res.status(400).json({ok:false,error:"پول کافی نداری."});
   }
-  await pool.query("INSERT INTO transactions(telegram_id,kind,resource,amount) VALUES($1,'purchase',$2,$3::bigint)",[String(req.user.id),item.column,totalAmount]);
+  await pool.query("INSERT INTO transactions(telegram_id,kind,resource,amount) VALUES($1,'purchase',$2,$3::numeric)",[String(req.user.id),item.column,totalAmount]);
   res.set("Cache-Control","no-store").json({ok:true,coins:String(q.rows[0].coins),quantity:quantity.toString(),totalPrice,totalAmount,totalIncome});
 });
 app.post("/telegram/webhook",async(req,res)=>{
