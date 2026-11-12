@@ -124,6 +124,16 @@ async function initDb() {
     );
     CREATE INDEX IF NOT EXISTS diplomacy_players_idx ON diplomacy(from_id,to_id,status);
     CREATE INDEX IF NOT EXISTS diplomacy_target_idx ON diplomacy(to_id,status);
+    CREATE TABLE IF NOT EXISTS battle_reports (
+      id BIGSERIAL PRIMARY KEY, attacker_id BIGINT NOT NULL REFERENCES players(telegram_id) ON DELETE CASCADE,
+      defender_id BIGINT NOT NULL REFERENCES players(telegram_id) ON DELETE CASCADE,
+      diplomacy_id BIGINT NOT NULL REFERENCES diplomacy(id) ON DELETE CASCADE, winner_id BIGINT NOT NULL,
+      attacker_power NUMERIC NOT NULL, defender_power NUMERIC NOT NULL,
+      attacker_losses JSONB NOT NULL DEFAULT '{}'::jsonb, defender_losses JSONB NOT NULL DEFAULT '{}'::jsonb,
+      summary TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS battle_reports_players_idx ON battle_reports(attacker_id,defender_id,id DESC);
+
 
   `);
   for (const [key,name,category,categoryName,icon,quantity,coins,steel,food,energy,oil,power,attack,defense,capacity,cooldown] of UNIT_DATABASE) {
@@ -509,6 +519,49 @@ app.post("/api/army/build",auth,async(req,res)=>{
     await client.query("COMMIT");
     res.json({ok:true,quantity,cost:totals});
   }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
+});
+app.get("/api/battles",auth,async(req,res)=>{
+ const id=String(req.user.id);
+ const q=await pool.query("SELECT b.id,b.attacker_id,b.defender_id,b.winner_id,b.attacker_power,b.defender_power,b.attacker_losses,b.defender_losses,b.summary,b.created_at,a.country_name AS attacker_country,d.country_name AS defender_country FROM battle_reports b JOIN players a ON a.telegram_id=b.attacker_id JOIN players d ON d.telegram_id=b.defender_id WHERE b.attacker_id=$1 OR b.defender_id=$1 ORDER BY b.id DESC LIMIT 30",[id]);
+ res.json({ok:true,reports:q.rows});
+});
+app.post("/api/battles/launch",auth,async(req,res)=>{
+ const attacker=String(req.user.id),target=String(req.body?.target_id||""),forces=req.body?.forces;
+ if(!/^\d{5,20}$/.test(target)||target===attacker||!forces||typeof forces!=="object"||Array.isArray(forces))return res.status(400).json({ok:false,error:"هدف یا ترکیب نیروها معتبر نیست."});
+ const entries=Object.entries(forces);
+ if(!entries.length||entries.length>20||entries.some(([k,v])=>!/^[a-zA-Z0-9_-]{1,64}$/.test(k)||!Number.isSafeInteger(Number(v))||Number(v)<0||Number(v)>50000)||entries.every(([,v])=>Number(v)===0))return res.status(400).json({ok:false,error:"حداقل یک یگان با تعداد معتبر انتخاب کن."});
+ const client=await pool.connect();
+ try{
+  await client.query("BEGIN");
+  const war=await client.query("SELECT id FROM diplomacy WHERE kind='war' AND status='active' AND ((from_id=$1 AND to_id=$2) OR (from_id=$2 AND to_id=$1)) FOR UPDATE",[attacker,target]);
+  if(!war.rowCount){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"برای این کشور هنوز جنگ فعالی ثبت نشده است."})}
+  const people=await client.query("SELECT telegram_id,country_name FROM players WHERE telegram_id=ANY($1::bigint[]) AND country_code IS NOT NULL FOR UPDATE",[[attacker,target]]);
+  if(people.rowCount!==2){await client.query("ROLLBACK");return res.status(404).json({ok:false,error:"کشور مهاجم یا مدافع پیدا نشد."})}
+  const cr=await client.query("SELECT unit_type,name,game_attack,game_defense,power FROM custom_unit_catalog");
+  const custom=new Map(cr.rows.map(x=>[x.unit_type,{name:x.name,attack:Number(x.game_attack||x.power||1),defense:Number(x.game_defense||Math.round(Number(x.power||1)*.55))}]));
+  const stats=t=>UNIT_CATALOG[t]?{name:UNIT_CATALOG[t].name,attack:Number(UNIT_CATALOG[t].gameAttack||UNIT_CATALOG[t].power||1),defense:Number(UNIT_CATALOG[t].gameDefense||1)}:custom.get(t);
+  const a=await client.query("SELECT unit_type,quantity FROM military_units WHERE telegram_id=$1 FOR UPDATE",[attacker]);
+  const d=await client.query("SELECT unit_type,quantity FROM military_units WHERE telegram_id=$1 FOR UPDATE",[target]);
+  const am=new Map(a.rows.map(x=>[x.unit_type,Number(x.quantity)])),dm=new Map(d.rows.map(x=>[x.unit_type,Number(x.quantity)]));
+  const used=entries.filter(([,v])=>Number(v)>0);let ap=0,dp=0,defending=[];
+  for(const [type,raw] of used){const qty=Number(raw),st=stats(type);if(!st||qty>(am.get(type)||0)){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"موجودی یکی از یگان‌های انتخابی کافی نیست یا مدل معتبر نیست."})}ap+=qty*st.attack}
+  for(const [type,qty] of dm){if(qty<=0)continue;const st=stats(type);if(!st)continue;dp+=qty*st.defense;defending.push({type,qty})}
+  if(!Number.isFinite(ap)||!Number.isFinite(dp)||ap<=0){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"قدرت ارتش برای نبرد کافی نیست."})}
+  const win=ap>=dp,winner=win?attacker:target,total=ap+dp||1;
+  const ar=Math.min(.38,Math.max(.04,(dp/total)*(win ? .30 : .58))),dr=Math.min(.48,Math.max(.05,(ap/total)*(win ? .62 : .34)));
+  const al={},dl={};
+  for(const [type,raw] of used){const qty=Number(raw),loss=Math.min(qty,Math.max(0,Math.ceil(qty*ar)));if(loss){al[type]=loss;await client.query("UPDATE military_units SET quantity=GREATEST(0,quantity-$1) WHERE telegram_id=$2 AND unit_type=$3",[loss,attacker,type])}}
+  for(const u of defending){const loss=Math.min(u.qty,Math.max(0,Math.ceil(u.qty*dr)));if(loss){dl[u.type]=loss;await client.query("UPDATE military_units SET quantity=GREATEST(0,quantity-$1) WHERE telegram_id=$2 AND unit_type=$3",[loss,target,u.type])}}
+  const names=new Map(people.rows.map(p=>[String(p.telegram_id),p.country_name||"کشور"]));
+  const summary=win?("🏆 "+names.get(attacker)+" در نبرد با "+names.get(target)+" پیروز شد."):("🛡️ "+names.get(target)+" حمله "+names.get(attacker)+" را دفع کرد.");
+  const report=await client.query("INSERT INTO battle_reports(attacker_id,defender_id,diplomacy_id,winner_id,attacker_power,defender_power,attacker_losses,defender_losses,summary) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9) RETURNING id",[attacker,target,war.rows[0].id,winner,ap,dp,JSON.stringify(al),JSON.stringify(dl),summary]);
+  await client.query("UPDATE players SET wins=wins+1 WHERE telegram_id=$1",[winner]);
+  await client.query("UPDATE players SET losses=losses+1 WHERE telegram_id=$1",[winner===attacker?target:attacker]);
+  await client.query("COMMIT");
+  await publishWorldEvent("⚔️ "+summary+" قدرت مهاجم: "+Math.round(ap).toLocaleString("en-US")+" • قدرت دفاع: "+Math.round(dp).toLocaleString("en-US"),"war",{report:report.rows[0].id});
+  await notifyPlayer(target,summary+" گزارش نبرد در بازی ثبت شد.","war",{report:report.rows[0].id});
+  res.json({ok:true,id:report.rows[0].id,summary,attackerPower:ap,defenderPower:dp,attackerLosses:al,defenderLosses:dl});
+ }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
 });
 app.get("/api/diplomacy",auth,async(req,res)=>{
   const id=String(req.user.id);
