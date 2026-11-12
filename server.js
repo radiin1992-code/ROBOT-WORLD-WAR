@@ -564,6 +564,13 @@ app.get("/api/announcements",auth,async(req,res)=>{
   const q=await pool.query("SELECT a.id,a.telegram_id,a.caption,a.image_data,a.created_at,p.first_name,p.country_name FROM announcements a JOIN players p ON p.telegram_id=a.telegram_id ORDER BY a.id DESC LIMIT 40");
   res.json({ok:true,items:q.rows});
 });
+app.post("/api/announcements/:id/delete",auth,ownerOnly,async(req,res)=>{
+  const id=String(req.params.id||"");
+  if(!/^\d+$/.test(id))return res.status(400).json({ok:false,error:"شناسه بیانیه معتبر نیست."});
+  const q=await pool.query("DELETE FROM announcements WHERE id=$1 RETURNING id",[id]);
+  if(!q.rowCount)return res.status(404).json({ok:false,error:"بیانیه پیدا نشد."});
+  res.json({ok:true,id:q.rows[0].id});
+});
 app.post("/api/announcements",auth,async(req,res)=>{
   const caption=String(req.body?.caption||"").trim(), image=String(req.body?.image||"");
   if(!image.startsWith("data:image/")||image.length>6100000)return res.status(400).json({ok:false,error:"عکس معتبر نیست یا حجمش زیاده (حداکثر حدود 4 مگابایت)."});
