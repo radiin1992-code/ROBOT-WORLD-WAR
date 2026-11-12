@@ -20,6 +20,7 @@ if ((css.match(/{/g) || []).length !== (css.match(/}/g) || []).length) throw new
 if (!html.includes("battleBriefing") || !html.includes("updateBattleBriefing") || !html.includes("battleBriefingComposition")) throw new Error("Live battle deployment briefing is missing.");
 if (!html.includes("battleCinematic") || !html.includes("showBattleCinematic") || !html.includes("battleResultBanner") || !html.includes("battleArena")) throw new Error("Cinematic battle result experience is missing.");
 if (!html.includes("battleMapZoomIn") || !html.includes("zoomBattleMap") || !html.includes("battleMapDragged")) throw new Error("Interactive battle map navigation is missing.");
+if (!server.includes("countries-10m.json") || !html.includes("WORLD ATLAS") || !html.includes("data-map-layer") || !html.includes("landFree")) throw new Error("Detailed atlas overhaul or map layer controls are missing.");
 const runCheck = (file) => {
   const result = spawnSync(process.execPath, ["--check", file], { encoding: "utf8" });
   if (result.status !== 0) throw new Error(result.stderr || result.stdout || "Syntax check failed: " + file);
