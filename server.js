@@ -91,6 +91,13 @@ async function initDb() {
       unit_type TEXT NOT NULL, quantity BIGINT NOT NULL DEFAULT 0,
       PRIMARY KEY(telegram_id,unit_type)
     );
+    CREATE TABLE IF NOT EXISTS custom_unit_catalog (
+      unit_type TEXT PRIMARY KEY, name TEXT NOT NULL, category TEXT NOT NULL, category_name TEXT NOT NULL,
+      icon TEXT NOT NULL DEFAULT '🧩', image_url TEXT NOT NULL, quantity BIGINT NOT NULL DEFAULT 1,
+      coins BIGINT NOT NULL DEFAULT 0, steel BIGINT NOT NULL DEFAULT 0, food BIGINT NOT NULL DEFAULT 0,
+      energy BIGINT NOT NULL DEFAULT 0, oil BIGINT NOT NULL DEFAULT 0, power BIGINT NOT NULL DEFAULT 1,
+      created_by BIGINT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
     CREATE TABLE IF NOT EXISTS national_buildings (
       telegram_id BIGINT NOT NULL REFERENCES players(telegram_id) ON DELETE CASCADE,
       building_type TEXT NOT NULL, level INT NOT NULL DEFAULT 0,
@@ -243,6 +250,15 @@ app.post("/api/upgrade",auth,async(req,res)=>{
   res.json({ok:true});
 });
 async function ownerOnly(req,res,next){if(!OWNER_IDS.has(String(req.user.id)))return res.status(403).json({ok:false,error:"دسترسی غیرمجاز"});next()}
+app.post("/api/owner/unit-catalog",auth,ownerOnly,async(req,res)=>{
+  const name=String(req.body?.name||"").trim().slice(0,60),category=String(req.body?.category||"ground"),categoryNames={ground:"نیروی زمینی",air:"یگان هوایی",naval:"ناوگان دریایی",support:"پشتیبانی"};
+  const imageUrl=String(req.body?.imageUrl||"").trim(),icon=String(req.body?.icon||"🧩").slice(0,12),quantity=Number(req.body?.quantity??1),power=Number(req.body?.power??10);
+  const cost={coins:Number(req.body?.coins),steel:Number(req.body?.steel),food:Number(req.body?.food),energy:Number(req.body?.energy),oil:Number(req.body?.oil)};
+  if(name.length<2||!categoryNames[category]||!/^https:\/\//i.test(imageUrl)||imageUrl.length>2048||!Number.isSafeInteger(quantity)||quantity<1||quantity>1000000||!Number.isSafeInteger(power)||power<1||power>1000000||Object.values(cost).some(v=>!Number.isSafeInteger(v)||v<0||v>100000000000))return res.status(400).json({ok:false,error:"اطلاعات مدل یا قیمت معتبر نیست."});
+  const key="custom_"+crypto.randomBytes(8).toString("hex");
+  await pool.query("INSERT INTO custom_unit_catalog(unit_type,name,category,category_name,icon,image_url,quantity,coins,steel,food,energy,oil,power,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)",[key,name,category,categoryNames[category],icon,imageUrl,quantity,cost.coins,cost.steel,cost.food,cost.energy,cost.oil,power,String(req.user.id)]);
+  res.json({ok:true,type:key});
+});
 app.get("/api/owner/players",auth,ownerOnly,async(_req,res)=>{
   const q=await pool.query("SELECT telegram_id,first_name,username,country_name,country_code,country_flag,created_at FROM players WHERE country_code IS NOT NULL ORDER BY country_name,first_name LIMIT 500");
   res.set("Cache-Control","no-store").json({ok:true,players:q.rows});
@@ -399,27 +415,33 @@ async function applyProduction(id){
 }
 app.get("/api/army",auth,async(req,res)=>{
   await applyProduction(req.user.id);
-  const [p,u,b]=await Promise.all([
+  const [p,u,b,custom]=await Promise.all([
     pool.query("SELECT coins,oil,steel,food,energy FROM players WHERE telegram_id=$1",[String(req.user.id)]),
     pool.query("SELECT unit_type,quantity FROM military_units WHERE telegram_id=$1",[String(req.user.id)]),
-    pool.query("SELECT building_type,level FROM national_buildings WHERE telegram_id=$1",[String(req.user.id)])
+    pool.query("SELECT building_type,level FROM national_buildings WHERE telegram_id=$1",[String(req.user.id)]),
+    pool.query("SELECT unit_type,name,category,category_name,icon,image_url,quantity,coins,steel,food,energy,oil,power FROM custom_unit_catalog ORDER BY created_at DESC")
   ]);
   const units=Object.fromEntries(u.rows.map(x=>[x.unit_type,Number(x.quantity)]));
   const buildings=Object.fromEntries(b.rows.map(x=>[x.building_type,Number(x.level)]));
-  res.json({ok:true,resources:p.rows[0],units,buildings,unitCatalog:UNIT_CATALOG,buildingCatalog:BUILDING_CATALOG});
+  const catalog={...UNIT_CATALOG};
+  for(const x of custom.rows)catalog[x.unit_type]={name:x.name,category:x.category,categoryName:x.category_name,icon:x.icon,imageUrl:x.image_url,quantity:Number(x.quantity),power:Number(x.power),cost:{coins:Number(x.coins),steel:Number(x.steel),food:Number(x.food),energy:Number(x.energy),oil:Number(x.oil)}};
+  res.json({ok:true,resources:p.rows[0],units,buildings,unitCatalog:catalog,buildingCatalog:BUILDING_CATALOG});
 });
 app.post("/api/army/recruit",auth,async(req,res)=>{
-  const type=req.body?.type,item=UNIT_CATALOG[type];if(!item)return res.status(400).json({ok:false,error:"نوع یگان معتبر نیست."});
-  const c=item.cost,client=await pool.connect();
+  const type=String(req.body?.type||""),item=UNIT_CATALOG[type];if(!item)return res.status(400).json({ok:false,error:"نوع یگان معتبر نیست."});
+  const batches=Number(req.body?.quantity??1);if(!Number.isSafeInteger(batches)||batches<1||batches>1000000)return res.status(400).json({ok:false,error:"تعداد معتبر نیست."});
+  const c=item.cost,totals={coins:c.coins*batches,steel:c.steel*batches,food:c.food*batches,energy:c.energy*batches,oil:c.oil*batches},added=Number(item.quantity)*batches;
+  if(!Number.isSafeInteger(added)||Object.values(totals).some(v=>!Number.isSafeInteger(v)))return res.status(400).json({ok:false,error:"تعداد انتخابی بیش از حد مجاز است."});
+  const client=await pool.connect();
   try{
     await client.query("BEGIN");
     const q=await client.query("UPDATE players SET coins=coins-$1,steel=steel-$2,food=food-$3,energy=energy-$4,oil=oil-$5,updated_at=NOW() WHERE telegram_id=$6 AND country_code IS NOT NULL AND coins >= $1 AND steel >= $2 AND food >= $3 AND energy >= $4 AND oil >= $5 RETURNING telegram_id",
-      [c.coins,c.steel,c.food,c.energy,c.oil,String(req.user.id)]);
-    if(!q.rowCount){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"منابع کافی نیست. هزینه و موجودی منابع را بررسی کن."})}
-    await client.query("INSERT INTO military_units(telegram_id,unit_type,quantity) VALUES($1,$2,$3) ON CONFLICT(telegram_id,unit_type) DO UPDATE SET quantity=military_units.quantity+EXCLUDED.quantity",[String(req.user.id),type,item.quantity]);
-    await client.query("INSERT INTO transactions(telegram_id,kind,resource,amount) VALUES($1,'recruit',$2,$3)",[String(req.user.id),type,item.quantity]);
+      [totals.coins,totals.steel,totals.food,totals.energy,totals.oil,String(req.user.id)]);
+    if(!q.rowCount){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"منابع کافی نیست. هزینه کل و موجودی منابع را بررسی کن."})}
+    await client.query("INSERT INTO military_units(telegram_id,unit_type,quantity) VALUES($1,$2,$3) ON CONFLICT(telegram_id,unit_type) DO UPDATE SET quantity=military_units.quantity+EXCLUDED.quantity",[String(req.user.id),type,added]);
+    await client.query("INSERT INTO transactions(telegram_id,kind,resource,amount) VALUES($1,'recruit',$2,$3)",[String(req.user.id),type,added]);
     await client.query("COMMIT");
-    res.json({ok:true});
+    res.json({ok:true,quantity:added,batches,cost:totals});
   }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
 });
 app.post("/api/army/build",auth,async(req,res)=>{
