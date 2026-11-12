@@ -461,13 +461,13 @@ const BUILDING_CATALOG = {
 const BUILDING_RESOURCE_OUTPUTS = {"power":{"energy":60},"solar":{"energy":45},"wind":{"energy":50},"hydro":{"energy":75},"oilfield":{"oil":150},"refinery":{"oil":220},"mine":{"steel":70},"steelworks":{"steel":120},"farm":{"food":120},"fishery":{"food":70},"commercial":{"food":8},"mall":{"food":12},"tourism":{"food":15},"hotel":{"food":10},"bank":{"energy":4},"techpark":{"steel":18},"cargoport":{"oil":18},"airport":{"oil":22},"datacenter":{"energy":16},"recycling":{"steel":35},"geothermal":{"energy":85},"nuclear":{"energy":200},"tidal":{"energy":70},"biomass":{"energy":48},"wastepower":{"energy":58},"solarpark":{"energy":140},"offshorewind":{"energy":155},"battery":{"energy":32},"gasfield":{"oil":300},"petrochem":{"oil":110,"steel":12},"factory":{"steel":55},"electronics":{"steel":30,"energy":6},"software":{"energy":12},"exchange":{"steel":5},"logistics":{"oil":18,"food":8},"containerport":{"oil":25,"steel":12},"university":{"energy":8},"hospital":{"food":20},"desalination":{"food":55},"greenhouse":{"food":180},"livestock":{"food":145},"quarry":{"steel":90},"lithium":{"steel":160},"media":{"energy":8},"research":{"steel":15}};
 for (const [key,item] of Object.entries(BUILDING_CATALOG)) {
   Object.assign(item.production, BUILDING_RESOURCE_OUTPUTS[key] || {});
-  for (const field of ["coins","energy","oil","steel","food","energyNeed"]) if(Number(item.production[field]||0)>0)item.production[field]=Number(item.production[field])*60;
+  for (const field of ["coins","energy","oil","steel","food"]) if(Number(item.production[field]||0)>0)item.production[field]=Number(item.production[field])*60;
   const p=item.production, parts=[];
   for (const [resource,label] of [["energy","برق"],["oil","نفت"],["steel","فولاد"],["food","غذا"],["coins","پول"]]) {
     const amount=Number(p[resource]||0);
     if(amount>0)parts.push("+"+amount.toLocaleString("en-US")+" "+label+"/دقیقه");
   }
-  if(p.energyNeed)parts.push("-"+Number(p.energyNeed).toLocaleString("en-US")+" برق مصرفی/دقیقه");
+  if(p.energyNeed)parts.push("-"+Number(p.energyNeed).toLocaleString("en-US")+" برق مصرفی/ساعت");
   item.output=parts.join(" • ");
 }
 
