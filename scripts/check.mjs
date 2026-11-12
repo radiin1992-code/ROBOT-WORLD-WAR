@@ -85,7 +85,7 @@ if (!server.includes("let buildingCoinIncome=0") || !server.includes("coins+=Mat
 if (!server.includes('agriculturecenter:{name:"مرکز کشاورزی"') || !server.includes('technologycenter:{name:"مرکز فناوری"') || !server.includes('factory:{name:"کارخانه صنعتی"')) throw new Error("Agriculture, technology, or factory buildings are missing.");
 if (!server.includes('toFixed(6)') || !server.includes('درآمد مستقیم پول')) throw new Error("Resource fractions or direct income labels are missing.");
 if (!server.includes('/api/commanders/dismiss') || !server.includes('autoActivated:player.rows[0].active_commander_id==null')) throw new Error("Commander dismissal or first-hire activation is missing.");
-if (!server.includes('Math.ceil(baseOperationCost*(1-attackerLogistics))') || !server.includes('nextBonusPercent')) throw new Error("Commander logistics discount or next-level preview is missing.");
+if (!server.includes('Math.ceil(baseOperationCost*distanceCostFactor*(1-attackerLogistics))') || !server.includes('nextBonusPercent')) throw new Error("Commander logistics discount or next-level preview is missing.");
 if (!server.includes('xp>=level*100') && !server.includes('xp+25>=level*100')) throw new Error("Commander battle XP progression is missing.");
 if (!html.includes('data-commander-dismiss') || !html.includes('box.querySelectorAll(".commander-art img")') || !html.includes('fallback.style.display="grid"')) throw new Error("Commander image fallback or dismissal UI is missing.");
 if (!server.includes('attackerAirBonus') || !server.includes('attackerLogistics') || !server.includes('defenderLogistics') || !server.includes('تجربه فرمانده مهاجم')) throw new Error("Commander battle bonuses or XP report are missing.");
@@ -94,5 +94,7 @@ if (!server.includes("attackerAttackBonus") || !server.includes("defenderDefense
 if (!html.includes('id="commanderGrid"') || !html.includes('data-commander-hire') || !html.includes('data-commander-upgrade') || !html.includes('id="battleCommanderInfo"')) throw new Error("Commander academy or battle UI is missing.");
 
 if (!server.includes("WORLD_RESOURCE_PROFILES") || !server.includes("/api/world/intel") || !server.includes('id:"suez"') || !server.includes('id:"panama"')) throw new Error("Natural resource profiles or strategic waterways are missing.");
+if (!server.includes("function countryDistanceKm") || !server.includes("seasonalSectorWeather") || !server.includes("battleWeather.airFactor") || !server.includes("routeDistanceKm")) throw new Error("Distance logistics or seasonal battle weather is missing.");
+if (!html.includes("attackerComposition") || !html.includes("defenderComposition") || !html.includes("has-aircraft")) throw new Error("Battle animation must reflect the actual selected unit composition.");
 if (!html.includes("worldIntelCountries") || !html.includes("worldWaterwayList") || !html.includes("battle-flight-track") || !html.includes("map-layer-resources-off")) throw new Error("World resource atlas or animated battle scene is missing.");
 console.log("RADINWAR checks passed: server, systems module, inline scripts, HTML IDs, CSS structure, build version.");
