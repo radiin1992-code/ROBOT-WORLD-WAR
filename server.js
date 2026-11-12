@@ -446,7 +446,9 @@ app.post("/api/army/recruit",auth,async(req,res)=>{
 });
 app.post("/api/army/build",auth,async(req,res)=>{
   const type=req.body?.type,item=BUILDING_CATALOG[type];if(!item)return res.status(400).json({ok:false,error:"نوع زیرساخت معتبر نیست."});
-  const client=await pool.connect(),c=item.cost;
+  const quantity=Number(req.body?.quantity??1);if(!Number.isSafeInteger(quantity)||quantity<1||quantity>1000000)return res.status(400).json({ok:false,error:"تعداد سطح معتبر نیست."});
+  const client=await pool.connect(),c=item.cost,totals={coins:c.coins*quantity,steel:c.steel*quantity,oil:c.oil*quantity,energy:c.energy*quantity};
+  if(Object.values(totals).some(v=>!Number.isSafeInteger(v)))return res.status(400).json({ok:false,error:"هزینه انتخاب‌شده بیش از حد مجاز است."});
   try{
     await client.query("BEGIN");
     const isEnergySource=["power","solar","wind","hydro","geothermal","nuclear","tidal","biomass","wastepower","solarpark","offshorewind","battery"].includes(type);
@@ -454,11 +456,11 @@ app.post("/api/army/build",auth,async(req,res)=>{
       const sources=await client.query("SELECT COALESCE(SUM(level),0)::int AS level FROM national_buildings WHERE telegram_id=$1 AND building_type IN ('power','solar','wind','hydro','geothermal','nuclear','tidal','biomass','wastepower','solarpark','offshorewind','battery')",[String(req.user.id)]);
       if(Number(sources.rows[0]?.level||0)<1){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"اول یک نیروگاه برق، خورشیدی، بادی یا آبی بساز."})}
     }
-    const q=await client.query("UPDATE players SET coins=coins-$1,steel=steel-$2,oil=oil-$3,energy=energy-$4,updated_at=NOW() WHERE telegram_id=$5 AND country_code IS NOT NULL AND coins >= $1 AND steel >= $2 AND oil >= $3 AND energy >= $4 RETURNING telegram_id",[c.coins,c.steel,c.oil,c.energy,String(req.user.id)]);
+    const q=await client.query("UPDATE players SET coins=coins-$1,steel=steel-$2,oil=oil-$3,energy=energy-$4,updated_at=NOW() WHERE telegram_id=$5 AND country_code IS NOT NULL AND coins >= $1 AND steel >= $2 AND oil >= $3 AND energy >= $4 RETURNING telegram_id",[totals.coins,totals.steel,totals.oil,totals.energy,String(req.user.id)]);
     if(!q.rowCount){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"منابع لازم برای ساخت این زیرساخت کافی نیست."})}
-    await client.query("INSERT INTO national_buildings(telegram_id,building_type,level) VALUES($1,$2,1) ON CONFLICT(telegram_id,building_type) DO UPDATE SET level=national_buildings.level+1",[String(req.user.id),type]);
+    await client.query("INSERT INTO national_buildings(telegram_id,building_type,level) VALUES($1,$2,$3) ON CONFLICT(telegram_id,building_type) DO UPDATE SET level=national_buildings.level+EXCLUDED.level",[String(req.user.id),type,quantity]);
     await client.query("COMMIT");
-    res.json({ok:true});
+    res.json({ok:true,quantity,cost:totals});
   }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
 });
 app.get("/api/diplomacy",auth,async(req,res)=>{
