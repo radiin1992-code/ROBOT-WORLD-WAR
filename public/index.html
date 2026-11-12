@@ -232,7 +232,7 @@ async function loadShop(){
  $("shopGrid").querySelectorAll(".shop-item").forEach(card=>{
   const item=shopItems.find(x=>x.id===card.dataset.shopId);
   card.querySelector("[data-quantity]").addEventListener("input",()=>updateShopCard(card,item));
-  card.querySelector("[data-max]").onclick=()=>{const max=Math.max(0,Math.floor(Number(me?.coins||0)/item.price));card.querySelector("[data-quantity]").value=max;updateShopCard(card,item)};
+  card.querySelector("[data-max]").onclick=()=>{let coins=0n;try{coins=BigInt(me?.coins||0)}catch{}const max=coins/BigInt(item.price);card.querySelector("[data-quantity]").value=max.toString();updateShopCard(card,item)};
   card.querySelector("[data-buy]").onclick=async()=>{
    const rawQuantity=shopDigits(card.querySelector("[data-quantity]").value);
    if(!/^\d+$/.test(rawQuantity)){toast("تعداد خرید معتبر نیست");return}
