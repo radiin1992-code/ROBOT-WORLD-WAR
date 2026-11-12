@@ -16,7 +16,7 @@ app.use(express.static("public",{setHeaders(res,filePath){if(filePath.endsWith("
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.PGSSL === "true" ? { rejectUnauthorized: false } : undefined, max: 10, idleTimeoutMillis: 30000, connectionTimeoutMillis: 10000 });
 const OWNER_ID = "1852348620";
 const OWNER_IDS = new Set([OWNER_ID, "8881463089"]);
-const BUILD_VERSION = "rw-20261112-06";
+const BUILD_VERSION="rw-20261112-07";
 const BOT_TOKEN = process.env.BOT_TOKEN || "";
 const PUBLIC_URL = process.env.RENDER_EXTERNAL_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? "https://" + process.env.RAILWAY_PUBLIC_DOMAIN : "");
 const MINI_APP_URL = process.env.MINI_APP_URL || PUBLIC_URL;
@@ -276,7 +276,7 @@ app.post("/api/select-country",auth,async(req,res)=>{
   }catch(e){await client.query("ROLLBACK");if(e.code==="23505")return res.status(409).json({ok:false,error:"این کشور همین الان توسط فرمانده دیگری انتخاب شد. یک کشور آزاد دیگر انتخاب کن."});throw e}finally{client.release()}
 });
 app.post("/api/upgrade",auth,async(req,res)=>{
-  const {kind}=req.body||{}, costs={industry:{coins:1800,steel:120},energy:{coins:1500,oil:80},technology:{coins:3000,steel:180},agriculture:{coins:1300,food:100}};
+  const {kind}=req.body||{}, costs={industry:{coins:900,steel:120},energy:{coins:750,oil:80},technology:{coins:1500,steel:180},agriculture:{coins:650,food:100}};
   if(!costs[kind])return res.status(400).json({ok:false,error:"ارتقای نامعتبر"});
   const c=costs[kind];
   const upgradeColumn=kind==="energy"?"energy_level":kind;
@@ -367,7 +367,7 @@ const UNIT_CATALOG = {
   air:{name:"یگان هوایی",icon:"✈️",quantity:5,cost:{coins:1250000,steel:90,food:15,energy:100,oil:110},power:260},
   navy:{name:"ناوگان دریایی",icon:"🚢",quantity:3,cost:{coins:1100000,steel:140,food:20,energy:65,oil:95},power:230}
 };
-const UNIT_DATABASE = [["f22","F-22 Raptor","air","نیروی هوایی","🛩️",5,1650000,100,20,110,140,920,88,18,3,2],["f35","F-35 Lightning II","air","نیروی هوایی","✈️",5,1480000,95,25,100,125,850,82,22,3,2],["f16","F-16 Fighting Falcon","air","نیروی هوایی","🛩️",6,980000,65,25,70,90,690,68,18,4,1],["rafale","Dassault Rafale","air","نیروی هوایی","✈️",5,1320000,90,20,90,115,810,78,20,3,2],["typhoon","Eurofighter Typhoon","air","نیروی هوایی","🛩️",5,1370000,95,20,95,120,830,80,20,3,2],["su57","Su-57 Felon","air","نیروی هوایی","🛩️",4,1580000,105,20,105,135,890,84,18,3,2],["b2","B-2 Spirit","air","نیروی هوایی","🛫",2,2800000,190,10,180,210,980,45,36,5,4],["b52","B-52 Stratofortress","air","نیروی هوایی","🛫",2,2200000,170,15,155,190,900,42,40,5,4],["c17","C-17 Globemaster III","air","نیروی هوایی","🛬",3,1650000,120,35,110,130,420,20,95,2,3],["awacs","AWACS Support Aircraft","support","پشتیبانی و شناسایی","📡",2,1750000,90,20,120,150,300,12,75,2,3],["reaper","MQ-9 Reaper","air","نیروی هوایی","🛸",4,1050000,65,15,65,75,560,48,16,3,2],["apache","AH-64 Apache","air","نیروی هوایی","🚁",5,1120000,75,20,75,95,720,62,14,3,2],["chinook","CH-47 Chinook","air","نیروی هوایی","🚁",4,920000,60,35,65,80,280,22,65,2,2],["infantry_pro","Professional Infantry","ground","نیروی زمینی","🪖",100,720000,45,100,25,10,320,58,30,2,1],["mechanized","Mechanized Infantry","ground","نیروی زمینی","🚙",30,980000,80,55,45,35,480,66,38,2,2],["mbt","Main Battle Tank","ground","نیروی زمینی","🛡️",12,1450000,130,20,65,75,820,72,12,4,2],["light_tank","Light Tank","ground","نیروی زمینی","🚜",15,1050000,95,25,50,55,610,58,16,3,2],["artillery","Field Artillery","ground","نیروی زمینی","🎯",8,1180000,105,15,55,65,760,24,10,4,3],["rocket_system","Rocket Support Unit","ground","نیروی زمینی","🚀",6,1380000,125,10,70,90,800,20,8,5,3],["recon","Reconnaissance Vehicle","support","پشتیبانی و شناسایی","🔭",12,760000,55,20,35,30,260,28,18,2,1],["engineer","Engineering Corps","support","پشتیبانی و شناسایی","🏗️",20,680000,45,65,30,20,180,18,25,2,1],["carrier","Aircraft Carrier","naval","ناوگان دریایی","🚢",1,4200000,320,40,210,260,980,92,100,6,5],["destroyer","Guided Missile Destroyer","naval","ناوگان دریایی","🛳️",2,2350000,180,20,125,160,820,80,30,4,3],["frigate","Frigate","naval","ناوگان دریایی","🚢",3,1680000,130,25,95,120,660,68,22,3,2],["submarine","Submarine","naval","ناوگان دریایی","🫧",2,2550000,190,10,110,150,860,74,18,5,4],["patrol_ship","Patrol Ship","naval","ناوگان دریایی","⛴️",4,920000,70,25,55,65,380,42,15,2,1],["amphibious","Amphibious Transport Ship","naval","ناوگان دریایی","🚢",2,1950000,145,55,105,125,360,32,80,3,3],["patriot","Patriot Defense Battery","defense","پدافند و دفاع","🛡️",2,1880000,150,10,95,130,180,920,12,4,3],["thaad","THAAD Defense Battery","defense","پدافند و دفاع","🛡️",1,2450000,210,5,120,160,160,980,10,5,4],["iron_dome","Iron Dome Defense Unit","defense","پدافند و دفاع","🏰",3,1280000,95,15,65,85,140,760,18,3,2],["radar","Long-Range Radar Station","support","پشتیبانی و شناسایی","📡",2,1120000,75,10,60,70,120,440,45,2,2],["command","Mobile Command Center","support","پشتیبانی و شناسایی","🎛️",1,1380000,95,15,80,90,260,380,55,3,2],["supply","Logistics Supply Convoy","support","پشتیبانی و شناسایی","🚚",5,850000,60,90,45,40,120,180,70,2,1],["medical","Field Medical Unit","support","پشتیبانی و شناسایی","🚑",6,780000,50,100,40,35,100,220,45,2,1],["satcom","Satellite Communications Unit","support","پشتیبانی و شناسایی","🛰️",1,1680000,100,10,95,110,210,520,60,3,3],["cyber_defense","Cyber Defense Center","support","پشتیبانی و شناسایی","💻",1,1450000,85,10,90,100,180,600,35,3,3]];
+const UNIT_DATABASE = [["f22","F-22 Raptor","air","نیروی هوایی","🛩️",5,33000,100,20,110,140,920,88,18,3,2],["f35","F-35 Lightning II","air","نیروی هوایی","✈️",5,29600,95,25,100,125,850,82,22,3,2],["f16","F-16 Fighting Falcon","air","نیروی هوایی","🛩️",6,19600,65,25,70,90,690,68,18,4,1],["rafale","Dassault Rafale","air","نیروی هوایی","✈️",5,26400,90,20,90,115,810,78,20,3,2],["typhoon","Eurofighter Typhoon","air","نیروی هوایی","🛩️",5,27400,95,20,95,120,830,80,20,3,2],["su57","Su-57 Felon","air","نیروی هوایی","🛩️",4,31600,105,20,105,135,890,84,18,3,2],["b2","B-2 Spirit","air","نیروی هوایی","🛫",2,56000,190,10,180,210,980,45,36,5,4],["b52","B-52 Stratofortress","air","نیروی هوایی","🛫",2,44000,170,15,155,190,900,42,40,5,4],["c17","C-17 Globemaster III","air","نیروی هوایی","🛬",3,33000,120,35,110,130,420,20,95,2,3],["awacs","AWACS Support Aircraft","support","پشتیبانی و شناسایی","📡",2,35000,90,20,120,150,300,12,75,2,3],["reaper","MQ-9 Reaper","air","نیروی هوایی","🛸",4,21000,65,15,65,75,560,48,16,3,2],["apache","AH-64 Apache","air","نیروی هوایی","🚁",5,22400,75,20,75,95,720,62,14,3,2],["chinook","CH-47 Chinook","air","نیروی هوایی","🚁",4,18400,60,35,65,80,280,22,65,2,2],["infantry_pro","Professional Infantry","ground","نیروی زمینی","🪖",100,14400,45,100,25,10,320,58,30,2,1],["mechanized","Mechanized Infantry","ground","نیروی زمینی","🚙",30,19600,80,55,45,35,480,66,38,2,2],["mbt","Main Battle Tank","ground","نیروی زمینی","🛡️",12,29000,130,20,65,75,820,72,12,4,2],["light_tank","Light Tank","ground","نیروی زمینی","🚜",15,21000,95,25,50,55,610,58,16,3,2],["artillery","Field Artillery","ground","نیروی زمینی","🎯",8,23600,105,15,55,65,760,24,10,4,3],["rocket_system","Rocket Support Unit","ground","نیروی زمینی","🚀",6,27600,125,10,70,90,800,20,8,5,3],["recon","Reconnaissance Vehicle","support","پشتیبانی و شناسایی","🔭",12,15200,55,20,35,30,260,28,18,2,1],["engineer","Engineering Corps","support","پشتیبانی و شناسایی","🏗️",20,13600,45,65,30,20,180,18,25,2,1],["carrier","Aircraft Carrier","naval","ناوگان دریایی","🚢",1,84000,320,40,210,260,980,92,100,6,5],["destroyer","Guided Missile Destroyer","naval","ناوگان دریایی","🛳️",2,47000,180,20,125,160,820,80,30,4,3],["frigate","Frigate","naval","ناوگان دریایی","🚢",3,33600,130,25,95,120,660,68,22,3,2],["submarine","Submarine","naval","ناوگان دریایی","🫧",2,51000,190,10,110,150,860,74,18,5,4],["patrol_ship","Patrol Ship","naval","ناوگان دریایی","⛴️",4,18400,70,25,55,65,380,42,15,2,1],["amphibious","Amphibious Transport Ship","naval","ناوگان دریایی","🚢",2,39000,145,55,105,125,360,32,80,3,3],["patriot","Patriot Defense Battery","defense","پدافند و دفاع","🛡️",2,37600,150,10,95,130,180,920,12,4,3],["thaad","THAAD Defense Battery","defense","پدافند و دفاع","🛡️",1,49000,210,5,120,160,160,980,10,5,4],["iron_dome","Iron Dome Defense Unit","defense","پدافند و دفاع","🏰",3,25600,95,15,65,85,140,760,18,3,2],["radar","Long-Range Radar Station","support","پشتیبانی و شناسایی","📡",2,22400,75,10,60,70,120,440,45,2,2],["command","Mobile Command Center","support","پشتیبانی و شناسایی","🎛️",1,27600,95,15,80,90,260,380,55,3,2],["supply","Logistics Supply Convoy","support","پشتیبانی و شناسایی","🚚",5,17000,60,90,45,40,120,180,70,2,1],["medical","Field Medical Unit","support","پشتیبانی و شناسایی","🚑",6,15600,50,100,40,35,100,220,45,2,1],["satcom","Satellite Communications Unit","support","پشتیبانی و شناسایی","🛰️",1,33600,100,10,95,110,210,520,60,3,3],["cyber_defense","Cyber Defense Center","support","پشتیبانی و شناسایی","💻",1,29000,85,10,90,100,180,600,35,3,3]];
 const UNIT_PERSIAN_NAMES = {"f22":"جنگنده اف-۲۲ رپتور","f35":"جنگنده اف-۳۵ لایتنینگ","f16":"جنگنده اف-۱۶ فایتینگ فالکن","rafale":"جنگنده رافال","typhoon":"جنگنده یوروفایتر تایفون","su57":"جنگنده سوخو ۵۷","b2":"بمب‌افکن بی-۲ اسپیریت","b52":"بمب‌افکن بی-۵۲","c17":"هواپیمای ترابری سی-۱۷","awacs":"هواپیمای آواکس","reaper":"پهپاد ام‌کیو-۹ ریپر","apache":"بالگرد آپاچی","chinook":"بالگرد شینوک","infantry_pro":"نیروی پیاده حرفه‌ای","mechanized":"پیاده‌نظام مکانیزه","mbt":"تانک اصلی میدان نبرد","light_tank":"تانک سبک","artillery":"توپخانه صحرایی","rocket_system":"یگان پشتیبانی راکتی","recon":"خودروی شناسایی","engineer":"گروه مهندسی","carrier":"ناو هواپیمابر","destroyer":"ناوشکن موشک‌انداز","frigate":"ناوچه","submarine":"زیردریایی","patrol_ship":"کشتی گشتی","amphibious":"کشتی ترابری آبی‌خاکی","patriot":"سامانه پدافندی پاتریوت","thaad":"سامانه پدافندی تاد","iron_dome":"سامانه گنبد آهنین","radar":"ایستگاه راداری دوربرد","command":"مرکز فرماندهی متحرک","supply":"کاروان تدارکاتی","medical":"واحد امداد پزشکی صحرایی","satcom":"واحد ارتباطات ماهواره‌ای","cyber_defense":"مرکز دفاع سایبری"};
 for(const row of UNIT_DATABASE){
   const [id,english,category,categoryName,icon,quantity,coins,steel,food,energy,oil,power,gameAttack,gameDefense,gameCapacity,gameOperationCost,gameCooldown]=row;
@@ -375,51 +375,51 @@ for(const row of UNIT_DATABASE){
 }
 
 const BUILDING_CATALOG = {
-  power:{name:"نیروگاه برق",icon:"⚡",cost:{coins:650000,steel:90,oil:35,energy:0},production:{energy:30},output:"تولید ۳۰ برق در ساعت"},
-  solar:{name:"مزرعه خورشیدی",icon:"☀️",cost:{coins:520000,steel:65,oil:0,energy:0},production:{energy:22},output:"تولید ۲۲ برق در ساعت"},
-  wind:{name:"نیروگاه بادی",icon:"🌬️",cost:{coins:580000,steel:75,oil:0,energy:0},production:{energy:24},output:"تولید ۲۴ برق در ساعت"},
-  hydro:{name:"نیروگاه آبی",icon:"💧",cost:{coins:880000,steel:130,oil:20,energy:0},production:{energy:28},output:"تولید ۲۸ برق در ساعت"},
-  oilfield:{name:"میدان استخراج نفت",icon:"🛢️",cost:{coins:760000,steel:85,oil:15,energy:35},production:{oil:9,energyNeed:2},output:"تولید ۹ نفت در ساعت"},
-  refinery:{name:"پالایشگاه نفت",icon:"🏭",cost:{coins:820000,steel:100,oil:0,energy:120},production:{oil:12,energyNeed:4},output:"تولید ۱۲ نفت در ساعت"},
-  mine:{name:"معدن فولاد",icon:"⛏️",cost:{coins:720000,steel:45,oil:35,energy:45},production:{steel:8,energyNeed:4},output:"تولید ۸ فولاد در ساعت"},
-  steelworks:{name:"کارخانه فولاد",icon:"🏗️",cost:{coins:950000,steel:60,oil:45,energy:150},production:{steel:10,energyNeed:6},output:"تولید ۱۰ فولاد در ساعت"},
-  farm:{name:"مزرعه صنعتی",icon:"🌾",cost:{coins:480000,steel:35,oil:0,energy:55},production:{food:18,energyNeed:3},output:"تولید ۱۸ غذا در ساعت"},
-  fishery:{name:"مرکز پرورش آبزیان",icon:"🐟",cost:{coins:390000,steel:28,oil:0,energy:35},production:{food:12,energyNeed:2},output:"تولید ۱۲ غذا در ساعت"},
-  commercial:{name:"منطقه تجاری",icon:"🏙️",cost:{coins:900000,steel:75,oil:20,energy:65},production:{energyNeed:3},output:"بدون درآمد مستقیم پولی"},
-  mall:{name:"مجتمع خرید",icon:"🛍️",cost:{coins:1250000,steel:95,oil:25,energy:90},production:{energyNeed:5},output:"بدون درآمد مستقیم پولی"},
-  tourism:{name:"مجموعه گردشگری",icon:"🏝️",cost:{coins:1050000,steel:65,oil:15,energy:55},production:{energyNeed:3},output:"بدون درآمد مستقیم پولی"},
-  hotel:{name:"هتل بین‌المللی",icon:"🏨",cost:{coins:680000,steel:48,oil:10,energy:40},production:{energyNeed:2},output:"بدون درآمد مستقیم پولی"},
-  bank:{name:"مرکز خدمات مالی",icon:"🏦",cost:{coins:1450000,steel:85,oil:20,energy:80},production:{energyNeed:4},output:"بدون درآمد مستقیم پولی"},
-  techpark:{name:"شهرک فناوری",icon:"💻",cost:{coins:1750000,steel:120,oil:35,energy:150},production:{energyNeed:8},output:"بدون درآمد مستقیم پولی"},
-  cargoport:{name:"بندر تجاری",icon:"⚓",cost:{coins:980000,steel:110,oil:30,energy:75},production:{energyNeed:3},output:"بدون درآمد مستقیم پولی"},
-  airport:{name:"فرودگاه باربری",icon:"🛫",cost:{coins:1350000,steel:125,oil:45,energy:110},production:{energyNeed:5},output:"بدون درآمد مستقیم پولی"},
-  datacenter:{name:"مرکز داده",icon:"🖥️",cost:{coins:1550000,steel:90,oil:25,energy:130},production:{energyNeed:6},output:"بدون درآمد مستقیم پولی"},
-  recycling:{name:"کارخانه بازیافت",icon:"♻️",cost:{coins:610000,steel:55,oil:10,energy:50},production:{steel:4,energyNeed:2},output:"تولید ۴ فولاد در ساعت"},
-  geothermal:{name:"نیروگاه زمین‌گرمایی",icon:"🌋",cost:{coins:980000,steel:110,oil:10,energy:0},production:{energy:32},output:"تولید ۳۲ برق در ساعت"},
-  nuclear:{name:"نیروگاه هسته‌ای بازی",icon:"☢️",cost:{coins:2400000,steel:260,oil:0,energy:0},production:{energy:85},output:"تولید ۸۵ برق در ساعت"},
-  tidal:{name:"نیروگاه جزرومدی",icon:"🌊",cost:{coins:1150000,steel:145,oil:0,energy:0},production:{energy:30},output:"تولید ۳۰ برق در ساعت"},
-  biomass:{name:"نیروگاه زیست‌توده",icon:"🍃",cost:{coins:690000,steel:75,oil:0,energy:0},production:{energy:20},output:"تولید ۲۰ برق در ساعت"},
-  wastepower:{name:"نیروگاه تبدیل پسماند",icon:"♻️",cost:{coins:850000,steel:95,oil:0,energy:0},production:{energy:25},output:"تولید ۲۵ برق در ساعت"},
-  solarpark:{name:"پارک خورشیدی بزرگ",icon:"🌞",cost:{coins:1450000,steel:160,oil:0,energy:0},production:{energy:58},output:"تولید ۵۸ برق در ساعت"},
-  offshorewind:{name:"مزرعه بادی فراساحلی",icon:"🌀",cost:{coins:1650000,steel:190,oil:0,energy:0},production:{energy:62},output:"تولید ۶۲ برق در ساعت"},
-  battery:{name:"مرکز ذخیره انرژی",icon:"🔋",cost:{coins:720000,steel:125,oil:0,energy:0},production:{energy:14},output:"افزایش ۱۴ واحد برق در ساعت در اقتصاد بازی"},
-  gasfield:{name:"میدان گاز طبیعی",icon:"🔥",cost:{coins:980000,steel:100,oil:0,energy:30},production:{oil:16,energyNeed:3},output:"تولید ۱۶ واحد سوخت در ساعت"},
-  petrochem:{name:"مجتمع پتروشیمی",icon:"🧪",cost:{coins:1320000,steel:145,oil:60,energy:100},production:{energyNeed:6},output:"بدون درآمد مستقیم پولی"},
-  factory:{name:"شهرک صنعتی",icon:"🏭",cost:{coins:1180000,steel:120,oil:30,energy:100},production:{steel:3,energyNeed:6},output:"تولید منابع بدون درآمد مستقیم پولی"},
-  electronics:{name:"کارخانه قطعات الکترونیکی",icon:"🔌",cost:{coins:1480000,steel:130,oil:25,energy:140},production:{energyNeed:8},output:"بدون درآمد مستقیم پولی"},
-  software:{name:"مرکز توسعه نرم‌افزار",icon:"🧑‍💻",cost:{coins:1080000,steel:55,oil:10,energy:95},production:{energyNeed:5},output:"بدون درآمد مستقیم پولی"},
-  exchange:{name:"بورس و بازار سرمایه",icon:"📈",cost:{coins:1850000,steel:90,oil:10,energy:90},production:{energyNeed:5},output:"بدون درآمد مستقیم پولی"},
-  logistics:{name:"مرکز لجستیک",icon:"🚚",cost:{coins:920000,steel:100,oil:35,energy:65},production:{energyNeed:3},output:"بدون درآمد مستقیم پولی"},
-  containerport:{name:"پایانه کانتینری",icon:"🚢",cost:{coins:1380000,steel:160,oil:35,energy:100},production:{energyNeed:5},output:"بدون درآمد مستقیم پولی"},
-  university:{name:"دانشگاه ملی",icon:"🎓",cost:{coins:1250000,steel:85,oil:10,energy:75},production:{energyNeed:4},output:"بدون درآمد مستقیم پولی"},
-  hospital:{name:"شبکه بیمارستانی",icon:"🏥",cost:{coins:1120000,steel:105,oil:15,energy:85},production:{energyNeed:5},output:"بدون درآمد مستقیم پولی"},
-  desalination:{name:"تأسیسات آب‌شیرین‌کن",icon:"💧",cost:{coins:970000,steel:115,oil:0,energy:95},production:{food:8,energyNeed:5},output:"تولید ۸ غذا در ساعت"},
-  greenhouse:{name:"گلخانه هوشمند",icon:"🌱",cost:{coins:760000,steel:70,oil:0,energy:60},production:{food:28,energyNeed:3},output:"تولید ۲۸ غذا در ساعت"},
-  livestock:{name:"مجتمع دامپروری",icon:"🐄",cost:{coins:640000,steel:55,oil:0,energy:45},production:{food:22,energyNeed:2},output:"تولید ۲۲ غذا در ساعت"},
-  quarry:{name:"معدن سنگ و مواد خام",icon:"🪨",cost:{coins:690000,steel:40,oil:20,energy:55},production:{steel:12,energyNeed:3},output:"تولید ۱۲ فولاد در ساعت"},
-  lithium:{name:"معدن مواد پیشرفته",icon:"💎",cost:{coins:1280000,steel:100,oil:25,energy:100},production:{steel:18,energyNeed:6},output:"تولید ۱۸ فولاد در ساعت"},
-  media:{name:"شبکه رسانه‌ای",icon:"📡",cost:{coins:870000,steel:45,oil:10,energy:50},production:{energyNeed:2},output:"بدون درآمد مستقیم پولی"},
-  research:{name:"مرکز پژوهش و نوآوری",icon:"🔬",cost:{coins:1620000,steel:125,oil:15,energy:145},production:{energyNeed:7},output:"بدون درآمد مستقیم پولی"},
+  power:{name:"نیروگاه برق",icon:"⚡",cost:{coins:13000,steel:90,oil:35,energy:0},production:{energy:30,coins:180},output:"تولید ۳۰ برق در ساعت"},
+  solar:{name:"مزرعه خورشیدی",icon:"☀️",cost:{coins:10400,steel:65,oil:0,energy:0},production:{energy:22,coins:150},output:"تولید ۲۲ برق در ساعت"},
+  wind:{name:"نیروگاه بادی",icon:"🌬️",cost:{coins:11600,steel:75,oil:0,energy:0},production:{energy:24,coins:160},output:"تولید ۲۴ برق در ساعت"},
+  hydro:{name:"نیروگاه آبی",icon:"💧",cost:{coins:17600,steel:130,oil:20,energy:0},production:{energy:28,coins:200},output:"تولید ۲۸ برق در ساعت"},
+  oilfield:{name:"میدان استخراج نفت",icon:"🛢️",cost:{coins:15200,steel:85,oil:15,energy:35},production:{oil:9,energyNeed:2,coins:300},output:"تولید ۹ نفت در ساعت"},
+  refinery:{name:"پالایشگاه نفت",icon:"🏭",cost:{coins:16400,steel:100,oil:0,energy:120},production:{oil:12,energyNeed:4,coins:420},output:"تولید ۱۲ نفت در ساعت"},
+  mine:{name:"معدن فولاد",icon:"⛏️",cost:{coins:14400,steel:45,oil:35,energy:45},production:{steel:8,energyNeed:4,coins:280},output:"تولید ۸ فولاد در ساعت"},
+  steelworks:{name:"کارخانه فولاد",icon:"🏗️",cost:{coins:19000,steel:60,oil:45,energy:150},production:{steel:10,energyNeed:6,coins:360},output:"تولید ۱۰ فولاد در ساعت"},
+  farm:{name:"مزرعه صنعتی",icon:"🌾",cost:{coins:9600,steel:35,oil:0,energy:55},production:{food:18,energyNeed:3,coins:240},output:"تولید ۱۸ غذا در ساعت"},
+  fishery:{name:"مرکز پرورش آبزیان",icon:"🐟",cost:{coins:7800,steel:28,oil:0,energy:35},production:{food:12,energyNeed:2,coins:200},output:"تولید ۱۲ غذا در ساعت"},
+  commercial:{name:"منطقه تجاری",icon:"🏙️",cost:{coins:18000,steel:75,oil:20,energy:65},production:{energyNeed:3,coins:1200},output:"بدون درآمد مستقیم پولی"},
+  mall:{name:"مجتمع خرید",icon:"🛍️",cost:{coins:25000,steel:95,oil:25,energy:90},production:{energyNeed:5,coins:1500},output:"بدون درآمد مستقیم پولی"},
+  tourism:{name:"مجموعه گردشگری",icon:"🏝️",cost:{coins:21000,steel:65,oil:15,energy:55},production:{energyNeed:3,coins:1400},output:"بدون درآمد مستقیم پولی"},
+  hotel:{name:"هتل بین‌المللی",icon:"🏨",cost:{coins:13600,steel:48,oil:10,energy:40},production:{energyNeed:2,coins:1100},output:"بدون درآمد مستقیم پولی"},
+  bank:{name:"مرکز خدمات مالی",icon:"🏦",cost:{coins:29000,steel:85,oil:20,energy:80},production:{energyNeed:4,coins:1800},output:"بدون درآمد مستقیم پولی"},
+  techpark:{name:"شهرک فناوری",icon:"💻",cost:{coins:35000,steel:120,oil:35,energy:150},production:{energyNeed:8,coins:1700},output:"بدون درآمد مستقیم پولی"},
+  cargoport:{name:"بندر تجاری",icon:"⚓",cost:{coins:19600,steel:110,oil:30,energy:75},production:{energyNeed:3,coins:950},output:"بدون درآمد مستقیم پولی"},
+  airport:{name:"فرودگاه باربری",icon:"🛫",cost:{coins:27000,steel:125,oil:45,energy:110},production:{energyNeed:5,coins:1250},output:"بدون درآمد مستقیم پولی"},
+  datacenter:{name:"مرکز داده",icon:"🖥️",cost:{coins:31000,steel:90,oil:25,energy:130},production:{energyNeed:6,coins:1750},output:"بدون درآمد مستقیم پولی"},
+  recycling:{name:"کارخانه بازیافت",icon:"♻️",cost:{coins:12200,steel:55,oil:10,energy:50},production:{steel:4,energyNeed:2,coins:220},output:"تولید ۴ فولاد در ساعت"},
+  geothermal:{name:"نیروگاه زمین‌گرمایی",icon:"🌋",cost:{coins:19600,steel:110,oil:10,energy:0},production:{energy:32,coins:220},output:"تولید ۳۲ برق در ساعت"},
+  nuclear:{name:"نیروگاه هسته‌ای بازی",icon:"☢️",cost:{coins:48000,steel:260,oil:0,energy:0},production:{energy:85,coins:500},output:"تولید ۸۵ برق در ساعت"},
+  tidal:{name:"نیروگاه جزرومدی",icon:"🌊",cost:{coins:23000,steel:145,oil:0,energy:0},production:{energy:30,coins:200},output:"تولید ۳۰ برق در ساعت"},
+  biomass:{name:"نیروگاه زیست‌توده",icon:"🍃",cost:{coins:13800,steel:75,oil:0,energy:0},production:{energy:20,coins:160},output:"تولید ۲۰ برق در ساعت"},
+  wastepower:{name:"نیروگاه تبدیل پسماند",icon:"♻️",cost:{coins:17000,steel:95,oil:0,energy:0},production:{energy:25,coins:190},output:"تولید ۲۵ برق در ساعت"},
+  solarpark:{name:"پارک خورشیدی بزرگ",icon:"🌞",cost:{coins:29000,steel:160,oil:0,energy:0},production:{energy:58,coins:300},output:"تولید ۵۸ برق در ساعت"},
+  offshorewind:{name:"مزرعه بادی فراساحلی",icon:"🌀",cost:{coins:33000,steel:190,oil:0,energy:0},production:{energy:62,coins:320},output:"تولید ۶۲ برق در ساعت"},
+  battery:{name:"مرکز ذخیره انرژی",icon:"🔋",cost:{coins:14400,steel:125,oil:0,energy:0},production:{energy:14,coins:130},output:"افزایش ۱۴ واحد برق در ساعت در اقتصاد بازی"},
+  gasfield:{name:"میدان گاز طبیعی",icon:"🔥",cost:{coins:19600,steel:100,oil:0,energy:30},production:{oil:16,energyNeed:3,coins:380},output:"تولید ۱۶ واحد سوخت در ساعت"},
+  petrochem:{name:"مجتمع پتروشیمی",icon:"🧪",cost:{coins:26400,steel:145,oil:60,energy:100},production:{energyNeed:6,coins:650},output:"بدون درآمد مستقیم پولی"},
+  factory:{name:"شهرک صنعتی",icon:"🏭",cost:{coins:23600,steel:120,oil:30,energy:100},production:{steel:3,energyNeed:6,coins:600},output:"تولید منابع بدون درآمد مستقیم پولی"},
+  electronics:{name:"کارخانه قطعات الکترونیکی",icon:"🔌",cost:{coins:29600,steel:130,oil:25,energy:140},production:{energyNeed:8,coins:850},output:"بدون درآمد مستقیم پولی"},
+  software:{name:"مرکز توسعه نرم‌افزار",icon:"🧑‍💻",cost:{coins:21600,steel:55,oil:10,energy:95},production:{energyNeed:5,coins:1050},output:"بدون درآمد مستقیم پولی"},
+  exchange:{name:"بورس و بازار سرمایه",icon:"📈",cost:{coins:37000,steel:90,oil:10,energy:90},production:{energyNeed:5,coins:2000},output:"بدون درآمد مستقیم پولی"},
+  logistics:{name:"مرکز لجستیک",icon:"🚚",cost:{coins:18400,steel:100,oil:35,energy:65},production:{energyNeed:3,coins:650},output:"بدون درآمد مستقیم پولی"},
+  containerport:{name:"پایانه کانتینری",icon:"🚢",cost:{coins:27600,steel:160,oil:35,energy:100},production:{energyNeed:5,coins:1000},output:"بدون درآمد مستقیم پولی"},
+  university:{name:"دانشگاه ملی",icon:"🎓",cost:{coins:25000,steel:85,oil:10,energy:75},production:{energyNeed:4,coins:500},output:"بدون درآمد مستقیم پولی"},
+  hospital:{name:"شبکه بیمارستانی",icon:"🏥",cost:{coins:22400,steel:105,oil:15,energy:85},production:{energyNeed:5,coins:420},output:"بدون درآمد مستقیم پولی"},
+  desalination:{name:"تأسیسات آب‌شیرین‌کن",icon:"💧",cost:{coins:19400,steel:115,oil:0,energy:95},production:{food:8,energyNeed:5,coins:280},output:"تولید ۸ غذا در ساعت"},
+  greenhouse:{name:"گلخانه هوشمند",icon:"🌱",cost:{coins:15200,steel:70,oil:0,energy:60},production:{food:28,energyNeed:3,coins:300},output:"تولید ۲۸ غذا در ساعت"},
+  livestock:{name:"مجتمع دامپروری",icon:"🐄",cost:{coins:12800,steel:55,oil:0,energy:45},production:{food:22,energyNeed:2,coins:260},output:"تولید ۲۲ غذا در ساعت"},
+  quarry:{name:"معدن سنگ و مواد خام",icon:"🪨",cost:{coins:13800,steel:40,oil:20,energy:55},production:{steel:12,energyNeed:3,coins:270},output:"تولید ۱۲ فولاد در ساعت"},
+  lithium:{name:"معدن مواد پیشرفته",icon:"💎",cost:{coins:25600,steel:100,oil:25,energy:100},production:{steel:18,energyNeed:6,coins:450},output:"تولید ۱۸ فولاد در ساعت"},
+  media:{name:"شبکه رسانه‌ای",icon:"📡",cost:{coins:17400,steel:45,oil:10,energy:50},production:{energyNeed:2,coins:700},output:"بدون درآمد مستقیم پولی"},
+  research:{name:"مرکز پژوهش و نوآوری",icon:"🔬",cost:{coins:32400,steel:125,oil:15,energy:145},production:{energyNeed:7,coins:750},output:"بدون درآمد مستقیم پولی"},
 };
 
 const COUNTRY_ECONOMY = {
@@ -462,6 +462,7 @@ async function applyProduction(id){
         if(production.oil)oil+=hours*active*production.oil;
         if(production.steel)steel+=hours*active*production.steel;
         if(production.food)food+=hours*active*production.food;
+         if(production.coins)coins+=hours*active*production.coins;
       }
       await client.query("UPDATE players SET coins=coins+$1::numeric,energy=energy+$2::numeric,oil=oil+$3::numeric,steel=steel+$4::numeric,food=food+$5::numeric,production_at=NOW() WHERE telegram_id=$6",[Math.floor(coins).toString(),(Math.floor(energy)-Math.floor(initialEnergy)).toString(),(Math.floor(oil)-Math.floor(initialOil)).toString(),(Math.floor(steel)-Math.floor(initialSteel)).toString(),(Math.floor(food)-Math.floor(initialFood)).toString(),String(id)]);
     }
@@ -810,17 +811,17 @@ app.post("/api/dm/:id",auth,async(req,res)=>{
 });
 app.get("/api/shop",auth,async(req,res)=>{
   res.set("Cache-Control","no-store").json({ok:true,items:[
-    {id:"oil",name:"نفت",icon:"🛢️",amount:100,price:180000,incomeBonus:0},
-    {id:"steel",name:"فولاد",icon:"🔩",amount:100,price:140000,incomeBonus:0},
-    {id:"food",name:"غذا",icon:"🌾",amount:250,price:90000,incomeBonus:0},
-    {id:"energy",name:"انرژی",icon:"⚡",amount:100,price:160000,incomeBonus:0},
-    {id:"industry",name:"کارخانه",icon:"🏭",amount:1,price:1200000,incomeBonus:0},
-    {id:"agriculture",name:"مرکز کشاورزی",icon:"🚜",amount:1,price:850000,incomeBonus:0},
-    {id:"technology",name:"مرکز فناوری",icon:"🧬",amount:1,price:1800000,incomeBonus:0}
+    {id:"oil",name:"نفت",icon:"🛢️",amount:100,price:18000,incomeBonus:0},
+    {id:"steel",name:"فولاد",icon:"🔩",amount:100,price:14000,incomeBonus:0},
+    {id:"food",name:"غذا",icon:"🌾",amount:250,price:9000,incomeBonus:0},
+    {id:"energy",name:"انرژی",icon:"⚡",amount:100,price:16000,incomeBonus:0},
+    {id:"industry",name:"کارخانه",icon:"🏭",amount:1,price:120000,incomeBonus:0},
+    {id:"agriculture",name:"مرکز کشاورزی",icon:"🚜",amount:1,price:85000,incomeBonus:0},
+    {id:"technology",name:"مرکز فناوری",icon:"🧬",amount:1,price:180000,incomeBonus:0}
   ]});
 });
 app.post("/api/shop/buy",auth,async(req,res)=>{
-  const catalog={oil:{price:180000,amount:100,column:"oil",incomeBonus:0},steel:{price:140000,amount:100,column:"steel",incomeBonus:0},food:{price:90000,amount:250,column:"food",incomeBonus:0},energy:{price:160000,amount:100,column:"energy",incomeBonus:0},industry:{price:1200000,amount:1,column:"industry",incomeBonus:0},agriculture:{price:850000,amount:1,column:"agriculture",incomeBonus:0},technology:{price:1800000,amount:1,column:"technology",incomeBonus:0}};
+  const catalog={oil:{price:18000,amount:100,column:"oil",incomeBonus:0},steel:{price:14000,amount:100,column:"steel",incomeBonus:0},food:{price:9000,amount:250,column:"food",incomeBonus:0},energy:{price:16000,amount:100,column:"energy",incomeBonus:0},industry:{price:120000,amount:1,column:"industry",incomeBonus:0},agriculture:{price:85000,amount:1,column:"agriculture",incomeBonus:0},technology:{price:180000,amount:1,column:"technology",incomeBonus:0}};
   const item=catalog[req.body?.item],rawQuantity=String(req.body?.quantity??"1");
   const quantityText=rawQuantity.replace(/[۰-۹]/g,d=>String("۰۱۲۳۴۵۶۷۸۹".indexOf(d))).replace(/[٠-٩]/g,d=>String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).replace(/[٬,\s]/g,"");
   if(!item)return res.status(400).json({ok:false,error:"کالای نامعتبر."});
