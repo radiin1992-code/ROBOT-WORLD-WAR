@@ -33,7 +33,7 @@ const ratesStart = server.indexOf("const BUILDING_RESOURCE_OUTPUTS = ") + "const
 const ratesEnd = server.indexOf(";\nfor", ratesStart);
 if (catalogStart < 0 || catalogEnd < 0 || ratesStart < 0 || ratesEnd < 0) throw new Error("Building production catalog is missing.");
 const catalogBlock = server.slice(catalogStart, catalogEnd);
-const buildingKeys = [...catalogBlock.matchAll(/^\\s{2}([a-zA-Z0-9_]+):\\{/gm)].map(x => x[1]);
+const buildingKeys = [...catalogBlock.matchAll(/^\s{2}([a-zA-Z0-9_]+):\\{/gm)].map(x => x[1]);
 const resourceRates = JSON.parse(server.slice(ratesStart, ratesEnd));
 if (buildingKeys.length !== 45 || buildingKeys.some(key => !resourceRates[key])) throw new Error("Every economy building must have a resource yield.");
 if (!server.includes("if(production.energy)energy+=hours*level*Number(production.energy)") || !server.includes("if(production.oil)oil+=hours*active*Number(production.oil)")) throw new Error("Hourly building resource production is not applied.");
