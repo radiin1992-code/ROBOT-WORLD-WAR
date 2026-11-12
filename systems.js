@@ -56,6 +56,7 @@ export async function initWorldSystems(pool) {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS espionage_reports_owner_idx ON espionage_reports(attacker_id,id DESC);
+    CREATE TABLE IF NOT EXISTS season_points (season_key TEXT NOT NULL, telegram_id BIGINT NOT NULL REFERENCES players(telegram_id) ON DELETE CASCADE, points INT NOT NULL DEFAULT 0, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY(season_key,telegram_id));
     CREATE TABLE IF NOT EXISTS season_claims (
       season_key TEXT NOT NULL, telegram_id BIGINT NOT NULL REFERENCES players(telegram_id) ON DELETE CASCADE,
       milestone INT NOT NULL, claimed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -69,7 +70,7 @@ export async function initWorldSystems(pool) {
     WHERE p.country_code IS NOT NULL
     ON CONFLICT(telegram_id,city_name) DO NOTHING`);
 }
-function seasonKey(date = new Date()) {
+export function getSeasonKey(date = new Date()) {
   const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
   const day = d.getUTCDay() || 7;
   d.setUTCDate(d.getUTCDate() + 4 - day);
@@ -78,9 +79,8 @@ function seasonKey(date = new Date()) {
   const week = Math.ceil((((d-yearStart)/86400000)+1)/7);
   return year + "-W" + String(week).padStart(2,"0");
 }
-function scoreFrom(row) {
-  return Number(row.wins||0)*100 + Number(row.level||1)*25 + Number(row.tech||0)*35 + Number(row.city||0)*20;
-}
+function scoreFrom(row) { return Number(row.points||0); }
+async function addSeasonPoints(client,telegramId,points) { await client.query("INSERT INTO season_points(season_key,telegram_id,points) VALUES($1,$2,$3) ON CONFLICT(season_key,telegram_id) DO UPDATE SET points=season_points.points+EXCLUDED.points,updated_at=NOW()",[getSeasonKey(),String(telegramId),points]); }
 export function registerWorldSystems(app,{pool,auth,applyProduction}) {
   app.get("/api/command-center",auth,async(req,res)=>{
     const id=String(req.user.id);
@@ -93,12 +93,11 @@ export function registerWorldSystems(app,{pool,auth,applyProduction}) {
       pool.query("SELECT coins,oil,steel,food,energy,wins,losses,level FROM players WHERE telegram_id=$1",[id])
     ]);
     const levels=Object.fromEntries(tech.rows.map(x=>[x.tech_id,Number(x.level)]));
-    const totalTech=Object.values(levels).reduce((a,b)=>a+b,0);
-    const totalCity=cities.rows.reduce((a,x)=>a+Number(x.level),0);
-    const points=scoreFrom({...player.rows[0],tech:totalTech,city:totalCity});
+    const seasonScore=await pool.query("SELECT points FROM season_points WHERE season_key=$1 AND telegram_id=$2",[getSeasonKey(),id]);
+    const points=Number(seasonScore.rows[0]?.points||0);
     const event=getCurrentWorldEvent();
     const cooldown=spy.rows[0]?.available_at||null;
-    res.json({ok:true,technologies:TECH.map(t=>({...t,level:levels[t.id]||0,locked:t.requires&&(levels[t.requires]||0)<1})),cities:cities.rows,resources:player.rows[0],event,season:{key:seasonKey(),points,rank:null},spy:{available_at:cooldown,reports:(await pool.query("SELECT r.id,r.success,r.report,r.created_at,p.country_name AS target_country FROM espionage_reports r JOIN players p ON p.telegram_id=r.target_id WHERE r.attacker_id=$1 ORDER BY r.id DESC LIMIT 8",[id])).rows}});
+    res.json({ok:true,technologies:TECH.map(t=>({...t,level:levels[t.id]||0,locked:t.requires&&(levels[t.requires]||0)<1})),cities:cities.rows,resources:player.rows[0],event,season:{key:getSeasonKey(),points,rank:null},spy:{available_at:cooldown,reports:(await pool.query("SELECT r.id,r.success,r.report,r.created_at,p.country_name AS target_country FROM espionage_reports r JOIN players p ON p.telegram_id=r.target_id WHERE r.attacker_id=$1 ORDER BY r.id DESC LIMIT 8",[id])).rows}});
   });
   app.post("/api/research",auth,async(req,res)=>{
     const tech=TECH.find(x=>x.id===String(req.body?.tech_id||""));
@@ -117,6 +116,7 @@ export function registerWorldSystems(app,{pool,auth,applyProduction}) {
       if(insufficient){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"منابع کافی نیست؛ هزینهٔ ارتقای بعدی بیشتر می‌شود."});}
       for(const [k,v] of costs)await client.query("UPDATE players SET "+k+"="+k+"-$1::numeric WHERE telegram_id=$2",[String(v),id]);
       await client.query("INSERT INTO player_technologies(telegram_id,tech_id,level) VALUES($1,$2,1) ON CONFLICT(telegram_id,tech_id) DO UPDATE SET level=player_technologies.level+1",[id,tech.id]);
+      await addSeasonPoints(client,id,20);
       await client.query("COMMIT");
       res.json({ok:true,level:level+1});
     }catch(e){await client.query("ROLLBACK");throw e}finally{client.release();}
@@ -135,6 +135,7 @@ export function registerWorldSystems(app,{pool,auth,applyProduction}) {
       const p=await client.query("UPDATE players SET coins=coins-$1,steel=steel-$2,food=food-$3 WHERE telegram_id=$4 AND coins>=$1 AND steel>=$2 AND food>=$3 RETURNING telegram_id",[coins,steel,food,id]);
       if(!p.rowCount){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"برای توسعهٔ شهر پول، فولاد یا غذا کافی نیست."});}
       await client.query("UPDATE player_cities SET level=level+1 WHERE id=$1",[cityId]);
+      await addSeasonPoints(client,id,15);
       await client.query("COMMIT");
       res.json({ok:true,level:level+1,bonus:"افزایش بازده تولید ملی"});
     }catch(e){await client.query("ROLLBACK");throw e}finally{client.release();}
@@ -175,6 +176,7 @@ export function registerWorldSystems(app,{pool,auth,applyProduction}) {
       if(!buyer.rowCount){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"پول کافی برای خرید این سفارش نداری."});}
       await client.query("UPDATE players SET coins=coins+$1::numeric WHERE telegram_id=$2",[String(sellerReceives),String(item.seller_id)]);
       await client.query("UPDATE player_market_listings SET status='filled',buyer_id=$1,completed_at=NOW() WHERE id=$2",[id,listingId]);
+      await addSeasonPoints(client,id,5);
       await client.query("COMMIT");res.json({ok:true,fee});
     }catch(e){await client.query("ROLLBACK");throw e}finally{client.release();}
   });
@@ -215,16 +217,14 @@ export function registerWorldSystems(app,{pool,auth,applyProduction}) {
       }else report.alert="دفاع اطلاعاتی کشور هدف مأموریت را شناسایی کرد.";
       await client.query("INSERT INTO espionage_cooldowns(telegram_id,available_at) VALUES($1,NOW()+INTERVAL '60 minutes') ON CONFLICT(telegram_id) DO UPDATE SET available_at=EXCLUDED.available_at",[id]);
       const saved=await client.query("INSERT INTO espionage_reports(attacker_id,target_id,success,report) VALUES($1,$2,$3,$4::jsonb) RETURNING id",[id,target,success,JSON.stringify(report)]);
+      if(success)await addSeasonPoints(client,id,10);
       await client.query("COMMIT");res.json({ok:true,success,report_id:saved.rows[0].id,report});
     }catch(e){await client.query("ROLLBACK");throw e}finally{client.release();}
   });
   app.get("/api/season",auth,async(req,res)=>{
-    const key=seasonKey();
-    const rows=await pool.query(`SELECT p.telegram_id,p.first_name,p.country_name,p.country_flag,p.wins,p.level,
-      COALESCE((SELECT SUM(level) FROM player_technologies t WHERE t.telegram_id=p.telegram_id),0)::int AS tech,
-      COALESCE((SELECT SUM(level) FROM player_cities c WHERE c.telegram_id=p.telegram_id),0)::int AS city
-      FROM players p WHERE p.country_code IS NOT NULL ORDER BY (p.wins*100+p.level*25+COALESCE((SELECT SUM(level)*35 FROM player_technologies t WHERE t.telegram_id=p.telegram_id),0)+COALESCE((SELECT SUM(level)*20 FROM player_cities c WHERE c.telegram_id=p.telegram_id),0)) DESC LIMIT 50`);
-    const board=rows.rows.map((x,i)=>({rank:i+1,telegram_id:String(x.telegram_id),name:x.country_name||x.first_name,flag:x.country_flag,points:scoreFrom(x),wins:Number(x.wins),is_me:String(x.telegram_id)===String(req.user.id)}));
+    const key=getSeasonKey();
+    const rows=await pool.query("SELECT p.telegram_id,p.first_name,p.country_name,p.country_flag,COALESCE(s.points,0)::int AS points FROM players p LEFT JOIN season_points s ON s.telegram_id=p.telegram_id AND s.season_key=$1 WHERE p.country_code IS NOT NULL ORDER BY s.points DESC NULLS LAST,s.updated_at ASC NULLS LAST LIMIT 50",[key]);
+    const board=rows.rows.map((x,i)=>({rank:i+1,telegram_id:String(x.telegram_id),name:x.country_name||x.first_name,flag:x.country_flag,points:Number(x.points||0),is_me:String(x.telegram_id)===String(req.user.id)}));
     const mine=board.find(x=>x.is_me)||null;
     const claimed=(await pool.query("SELECT milestone FROM season_claims WHERE season_key=$1 AND telegram_id=$2",[key,String(req.user.id)])).rows.map(x=>Number(x.milestone));
     res.json({ok:true,season:key,board,mine,claimed,milestones:[{points:500,coins:5000,oil:50},{points:1500,coins:15000,steel:100},{points:3500,coins:35000,energy:150}]});
@@ -232,14 +232,11 @@ export function registerWorldSystems(app,{pool,auth,applyProduction}) {
   app.post("/api/season/claim",auth,async(req,res)=>{
     const milestone=Number(req.body?.milestone),rewards={500:{coins:5000,oil:50},1500:{coins:15000,steel:100},3500:{coins:35000,energy:150}};
     if(!rewards[milestone])return res.status(400).json({ok:false,error:"پاداش فصل معتبر نیست."});
-    const id=String(req.user.id),key=seasonKey(),client=await pool.connect();
+    const id=String(req.user.id),key=getSeasonKey(),client=await pool.connect();
     try{
       await client.query("BEGIN");
-      const score=await client.query(`SELECT p.wins,p.level,
-        COALESCE((SELECT SUM(level) FROM player_technologies t WHERE t.telegram_id=p.telegram_id),0)::int AS tech,
-        COALESCE((SELECT SUM(level) FROM player_cities c WHERE c.telegram_id=p.telegram_id),0)::int AS city
-        FROM players p WHERE p.telegram_id=$1 FOR UPDATE`,[id]);
-      if(!score.rowCount||scoreFrom(score.rows[0])<milestone){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"امتیاز لازم برای این جایزه هنوز کامل نشده."});}
+      const score=await client.query("SELECT points FROM season_points WHERE season_key=$1 AND telegram_id=$2 FOR UPDATE",[key,id]);
+      if(!score.rowCount||Number(score.rows[0].points)<milestone){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"امتیاز لازم برای این جایزه هنوز کامل نشده."});}
       const claim=await client.query("INSERT INTO season_claims(season_key,telegram_id,milestone) VALUES($1,$2,$3) ON CONFLICT DO NOTHING RETURNING milestone",[key,id,milestone]);
       if(!claim.rowCount){await client.query("ROLLBACK");return res.status(409).json({ok:false,error:"این پاداش را قبلاً دریافت کرده‌ای."});}
       const r=rewards[milestone];
