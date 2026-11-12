@@ -27,7 +27,13 @@ for (const method of ["get","post","put","patch","delete"]) {
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.PGSSL === "true" ? { rejectUnauthorized: false } : undefined, max: 10, idleTimeoutMillis: 30000, connectionTimeoutMillis: 10000 });
 const OWNER_ID = "1852348620";
 const OWNER_IDS = new Set([OWNER_ID, "8881463089"]);
-const BUILD_VERSION='rw-20261112-20';
+const BUILD_VERSION='rw-20261112-21';
+const COMMANDER_CATALOG = [
+ {key:"assault",name:"ژنرال آذرخش",role:"فرمانده تهاجمی",description:"رهبری تهاجمی و افزایش قدرت کل نیروی اعزامی",effect:"قدرت حمله +۱۵٪ در سطح ۱، به‌علاوه ۲٪ در هر سطح",base:15,perLevel:2,cost:{coins:120000,oil:250,steel:180,energy:120},image:"https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=720&q=85",icon:"⚔️"},
+ {key:"defense",name:"ژنرال سپر آهنین",role:"فرمانده دفاعی",description:"استحکام خطوط دفاعی و افزایش قدرت دفاع کشور",effect:"قدرت دفاع +۲۰٪ در سطح ۱، به‌علاوه ۲٪ در هر سطح",base:20,perLevel:2,cost:{coins:100000,oil:150,steel:300,energy:150},image:"https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=720&q=85",icon:"🛡️"},
+ {key:"air",name:"ژنرال آسمان",role:"فرمانده هوایی",description:"هماهنگی بهتر نیروی هوایی و افزایش قدرت یگان‌های هوایی",effect:"قدرت هوایی +۱۵٪ در سطح ۱، به‌علاوه ۲٪ در هر سطح",base:15,perLevel:2,cost:{coins:150000,oil:350,steel:220,energy:200},image:"https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=720&q=85",icon:"✈️"},
+ {key:"logistics",name:"ژنرال تدارکات",role:"فرمانده لجستیک",description:"مدیریت بهتر سوخت و انرژی عملیات و کاهش هزینه اعزام نیرو",effect:"کاهش هزینه نفت و انرژی عملیات تا ۱۸٪ با ارتقای سطح",base:10,perLevel:1,cost:{coins:90000,oil:180,steel:180,energy:120},image:"https://images.unsplash.com/photo-1507591064344-4c6ce005b128?auto=format&fit=crop&w=720&q=85",icon:"📦"}
+];
 const BOT_TOKEN = process.env.BOT_TOKEN || "";
 const PUBLIC_URL = process.env.RENDER_EXTERNAL_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? "https://" + process.env.RAILWAY_PUBLIC_DOMAIN : "");
 const MINI_APP_URL = process.env.MINI_APP_URL || PUBLIC_URL;
