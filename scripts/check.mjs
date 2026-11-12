@@ -40,11 +40,12 @@ if (!server.includes("const coinIncomePerSecond=300+Math.max(0,Number(p.rows[0].
 if (!server.includes('const IRAN_TIME_ZONE = "Asia/Tehran"') || !server.includes("return hour >= 12") || !server.includes("setInterval(()=>syncWarSchedule()") || !server.includes("war_schedule_state")) throw new Error("Iran-time automatic war schedule is missing.");
 if (!server.includes("CREATE TABLE IF NOT EXISTS territory_sectors") || !server.includes("target_sector TEXT")) throw new Error("Persistent territorial sector storage is missing.");
 if (!server.includes("sectorInput=req.body?.sector") || !server.includes("ON CONFLICT(sector_key) DO UPDATE SET owner_id=EXCLUDED.owner_id")) throw new Error("Battle sector validation or capture persistence is missing.");
-if (!server.includes("territoryBoost=1+Math.min(0.20") || !server.includes("territoryBoost*(1+Number(tech.industry")) throw new Error("Captured territory production bonus is missing.");
+if (!server.includes("territoryBoost=1+Math.min(0.20") || !server.includes("coins=Math.floor(coins*territoryBoost)") || !server.includes("territoryBoost*(1+Number(tech.industry")) throw new Error("Captured territory production bonus is missing.");
 if (!server.includes("منطقهٔ انتخابی را تصرف کرد") || !server.includes("منطقه حفظ شد")) throw new Error("Territorial battle result messages are missing.");
 if (!html.includes("function pointInMapFeature") || !html.includes("selectedBattleSector") || !html.includes("sector:{lat:selectedBattleSector.lat,lng:selectedBattleSector.lng}") || !html.includes('clip-path="url(#clip-')) throw new Error("Clickable map-region selection or ownership overlay is missing.");
 if (!server.includes("function pointInCountry(code,lng,lat)") || !server.includes("pointInCountry(defenderCountry,sectorLng,sectorLat)")) throw new Error("Server-side battle region border validation is missing.");
 if (!html.includes('id="territoryGrid"') || !html.includes("تقسیم‌بندی مناطق جنگی") || !html.includes("تقسیم‌بندی")) throw new Error("Active war region grid display is missing.");
+if (!html.includes("هر منطقهٔ تصرف‌شده ۱٪ به تولید پول و منابع اضافه می‌کند")) throw new Error("Territory production bonus is not explained in the battle map UI.");
 if (!html.includes("selectedBattleSector.targetId!==target_id")) throw new Error("Battle target must match the selected map region.");
 
 
