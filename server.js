@@ -730,8 +730,9 @@ app.post("/api/battles/launch",auth,async(req,res)=>{
   if(!sectorInput||!Number.isFinite(Number(sectorInput.lat))||!Number.isFinite(Number(sectorInput.lng))||Number(sectorInput.lat)<-85||Number(sectorInput.lat)>85||Number(sectorInput.lng)<-180||Number(sectorInput.lng)>180){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"ابتدا یک منطقه معتبر از داخل نقشه انتخاب کن."})}
   const defenderCountry=people.rows.find(p=>String(p.telegram_id)===target)?.country_code;
   if(!defenderCountry){await client.query("ROLLBACK");return res.status(404).json({ok:false,error:"کد کشور مدافع پیدا نشد."})}
+  const sectorLat=Number(sectorInput.lat),sectorLng=Number(sectorInput.lng);
   if(!pointInCountry(defenderCountry,sectorLng,sectorLat)){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"مختصات انتخابی داخل مرز کشور هدف نیست."})}
-  const sectorLat=Number(sectorInput.lat),sectorLng=Number(sectorInput.lng),sectorX=Math.floor((sectorLng+180)/8),sectorY=Math.floor((sectorLat+90)/8),sectorKey=defenderCountry+":"+sectorX+":"+sectorY;
+  const sectorX=Math.floor((sectorLng+180)/8),sectorY=Math.floor((sectorLat+90)/8),sectorKey=defenderCountry+":"+sectorX+":"+sectorY;
   const existingSector=await client.query("SELECT owner_id FROM territory_sectors WHERE sector_key=$1 FOR UPDATE",[sectorKey]);
   if(existingSector.rowCount&&String(existingSector.rows[0].owner_id)===attacker){await client.query("ROLLBACK");return res.status(409).json({ok:false,error:"این منطقه از قبل تحت کنترل کشور توست."})}
   if(existingSector.rowCount&&String(existingSector.rows[0].owner_id)!==target){await client.query("ROLLBACK");return res.status(409).json({ok:false,error:"این منطقه در حال حاضر تحت کنترل کشور دیگری است."})}
@@ -799,7 +800,7 @@ app.post("/api/battles/launch",auth,async(req,res)=>{
       await client.query("UPDATE players SET coins=coins+$1::numeric,oil=oil+$2::numeric,steel=steel+$3::numeric,food=food+$4::numeric,energy=energy+$5::numeric WHERE telegram_id=$6",[loot.coins,loot.oil,loot.steel,loot.food,loot.energy,attacker]);
     }
   }
-  for(const [type,raw] of used){const qty=Number(raw),loss=Math.min(qty,Math.max(0,Math.ceil(qty*ar)));if(loss){al[type]=loss;await client.query("UPDATE military_units SET quantity=GREATEST(0,quantity-$1) WHERE telegram_id=$2 AND unit_type=$3",[loss,attacker,type])}}
+  for(const [type,raw] of used){const qty=Number(raw);al[type]=qty;await client.query("UPDATE military_units SET quantity=quantity-$1 WHERE telegram_id=$2 AND unit_type=$3 AND quantity>=$1",[qty,attacker,type])}
   for(const u of defending){const loss=Math.min(u.qty,Math.max(0,Math.ceil(u.qty*dr)));if(loss){dl[u.type]=loss;await client.query("UPDATE military_units SET quantity=GREATEST(0,quantity-$1) WHERE telegram_id=$2 AND unit_type=$3",[loss,target,u.type])}}
   const names=new Map(people.rows.map(p=>[String(p.telegram_id),p.country_name||"کشور"]));
   const lootText=win?" غنیمت: "+[["🪙",loot.coins],["🛢️",loot.oil],["🔩",loot.steel],["🌾",loot.food],["⚡",loot.energy]].filter(([,v])=>BigInt(v)>0n).map(([icon,v])=>icon+" "+BigInt(v).toLocaleString("en-US")).join(" • "):"";
