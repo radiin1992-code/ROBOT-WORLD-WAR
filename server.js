@@ -553,15 +553,36 @@ app.post("/api/battles/launch",auth,async(req,res)=>{
   if(!war.rowCount){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"برای این کشور هنوز جنگ فعالی ثبت نشده است."})}
   const people=await client.query("SELECT telegram_id,country_name FROM players WHERE telegram_id=ANY($1::bigint[]) AND country_code IS NOT NULL FOR UPDATE",[[attacker,target]]);
   if(people.rowCount!==2){await client.query("ROLLBACK");return res.status(404).json({ok:false,error:"کشور مهاجم یا مدافع پیدا نشد."})}
-  const cr=await client.query("SELECT unit_type,name,game_attack,game_defense,power FROM custom_unit_catalog");
-  const custom=new Map(cr.rows.map(x=>[x.unit_type,{name:x.name,attack:Number(x.game_attack||x.power||1),defense:Number(x.game_defense||Math.round(Number(x.power||1)*.55))}]));
-  const stats=t=>UNIT_CATALOG[t]?{name:UNIT_CATALOG[t].name,attack:Number(UNIT_CATALOG[t].gameAttack||UNIT_CATALOG[t].power||1),defense:Number(UNIT_CATALOG[t].gameDefense||1)}:custom.get(t);
+  const cr=await client.query("SELECT unit_type,name,category,game_attack,game_defense,power FROM custom_unit_catalog");
+  const custom=new Map(cr.rows.map(x=>[x.unit_type,{name:x.name,category:String(x.category||"support").toLowerCase(),attack:Number(x.game_attack||x.power||1),defense:Number(x.game_defense||Math.round(Number(x.power||1)*.55))}]));
+  const stats=t=>UNIT_CATALOG[t]?{name:UNIT_CATALOG[t].name,category:(t==="infantry"||t==="armor")?"ground":t==="air"?"air":t==="navy"?"naval":"support",attack:Number(UNIT_CATALOG[t].gameAttack||UNIT_CATALOG[t].power||1),defense:Number(UNIT_CATALOG[t].gameDefense||1)}:custom.get(t);
   const a=await client.query("SELECT unit_type,quantity FROM military_units WHERE telegram_id=$1 FOR UPDATE",[attacker]);
   const d=await client.query("SELECT unit_type,quantity FROM military_units WHERE telegram_id=$1 FOR UPDATE",[target]);
+  const [at,dt]=await Promise.all([
+    client.query("SELECT tech_id,level FROM player_technologies WHERE telegram_id=$1",[attacker]),
+    client.query("SELECT tech_id,level FROM player_technologies WHERE telegram_id=$1",[target])
+  ]);
+  const attackerTech=Object.fromEntries(at.rows.map(x=>[x.tech_id,Number(x.level)]));
+  const defenderTech=Object.fromEntries(dt.rows.map(x=>[x.tech_id,Number(x.level)]));
   const am=new Map(a.rows.map(x=>[x.unit_type,Number(x.quantity)])),dm=new Map(d.rows.map(x=>[x.unit_type,Number(x.quantity)]));
   const used=entries.filter(([,v])=>Number(v)>0);let ap=0,dp=0,defending=[];
-  for(const [type,raw] of used){const qty=Number(raw),st=stats(type);if(!st||qty>(am.get(type)||0)){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"موجودی یکی از یگان‌های انتخابی کافی نیست یا مدل معتبر نیست."})}ap+=qty*st.attack}
-  for(const [type,qty] of dm){if(qty<=0)continue;const st=stats(type);if(!st)continue;dp+=qty*st.defense;defending.push({type,qty})}
+  for(const [type,raw] of used){
+    const qty=Number(raw),st=stats(type);
+    if(!st||qty>(am.get(type)||0)){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"موجودی یکی از یگان‌های انتخابی کافی نیست یا مدل معتبر نیست."})}
+    const techBonus=st.category==="ground"?Number(attackerTech.military||0)*.06:st.category==="air"?Number(attackerTech.aviation||0)*.07:0;
+    ap+=qty*st.attack*(1+techBonus);
+  }
+  for(const [type,qty] of dm){
+    if(qty<=0)continue;
+    const st=stats(type);if(!st)continue;
+    dp+=qty*st.defense*(1+Number(defenderTech.defense||0)*.07);
+    defending.push({type,qty});
+  }
+  const technologyBonuses={
+    attackerGroundAttack:Math.round(Number(attackerTech.military||0)*6),
+    attackerAirAttack:Math.round(Number(attackerTech.aviation||0)*7),
+    defenderDefense:Math.round(Number(defenderTech.defense||0)*7)
+  };
   if(!Number.isFinite(ap)||!Number.isFinite(dp)||ap<=0){await client.query("ROLLBACK");return res.status(400).json({ok:false,error:"قدرت ارتش برای نبرد کافی نیست."})}
   const win=ap>=dp,winner=win?attacker:target,total=ap+dp||1;
   const ar=Math.min(.38,Math.max(.04,(dp/total)*(win ? .30 : .58))),dr=Math.min(.48,Math.max(.05,(ap/total)*(win ? .62 : .34)));
@@ -592,7 +613,7 @@ app.post("/api/battles/launch",auth,async(req,res)=>{
   await client.query("COMMIT");
   await publishWorldEvent("⚔️ "+summary+" قدرت مهاجم: "+Math.round(ap).toLocaleString("en-US")+" • قدرت دفاع: "+Math.round(dp).toLocaleString("en-US"),"war",{report:report.rows[0].id});
   await notifyPlayer(target,summary+" گزارش نبرد در بازی ثبت شد.","war",{report:report.rows[0].id});
-  res.json({ok:true,id:report.rows[0].id,summary,loot,attackerPower:ap,defenderPower:dp,attackerLosses:al,defenderLosses:dl});
+  res.json({ok:true,id:report.rows[0].id,summary,loot,attackerPower:ap,defenderPower:dp,attackerLosses:al,defenderLosses:dl,technologyBonuses});
  }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
 });
 app.get("/api/diplomacy",auth,async(req,res)=>{
