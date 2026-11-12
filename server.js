@@ -435,6 +435,19 @@ const BUILDING_CATALOG = {
   research:{name:"مرکز پژوهش و نوآوری",icon:"🔬",cost:{coins:32400,steel:125,oil:15,energy:145},production:{energyNeed:7,coins:750},output:"بدون درآمد مستقیم پولی • درآمد 750 پول در ساعت"},
 };
 
+
+const BUILDING_RESOURCE_OUTPUTS = {"power":{"energy":60},"solar":{"energy":45},"wind":{"energy":50},"hydro":{"energy":75},"oilfield":{"oil":150},"refinery":{"oil":220},"mine":{"steel":70},"steelworks":{"steel":120},"farm":{"food":120},"fishery":{"food":70},"commercial":{"food":8},"mall":{"food":12},"tourism":{"food":15},"hotel":{"food":10},"bank":{"energy":4},"techpark":{"steel":18},"cargoport":{"oil":18},"airport":{"oil":22},"datacenter":{"energy":16},"recycling":{"steel":35},"geothermal":{"energy":85},"nuclear":{"energy":200},"tidal":{"energy":70},"biomass":{"energy":48},"wastepower":{"energy":58},"solarpark":{"energy":140},"offshorewind":{"energy":155},"battery":{"energy":32},"gasfield":{"oil":300},"petrochem":{"oil":110,"steel":12},"factory":{"steel":55},"electronics":{"steel":30,"energy":6},"software":{"energy":12},"exchange":{"steel":5},"logistics":{"oil":18,"food":8},"containerport":{"oil":25,"steel":12},"university":{"energy":8},"hospital":{"food":20},"desalination":{"food":55},"greenhouse":{"food":180},"livestock":{"food":145},"quarry":{"steel":90},"lithium":{"steel":160},"media":{"energy":8},"research":{"steel":15}};
+for (const [key,item] of Object.entries(BUILDING_CATALOG)) {
+  Object.assign(item.production, BUILDING_RESOURCE_OUTPUTS[key] || {});
+  const p=item.production, parts=[];
+  for (const [resource,label] of [["energy","برق"],["oil","نفت"],["steel","فولاد"],["food","غذا"],["coins","پول"]]) {
+    const amount=Number(p[resource]||0);
+    if(amount>0)parts.push("+"+amount.toLocaleString("en-US")+" "+label+"/ساعت");
+  }
+  if(p.energyNeed)parts.push("-"+Number(p.energyNeed).toLocaleString("en-US")+" برق مصرفی/ساعت");
+  item.output=parts.join(" • ");
+}
+
 const COUNTRY_ECONOMY = {
  USA:{income:5,energy:42,oil:22,steel:14,food:25}, CHN:{income:5,energy:48,oil:14,steel:32,food:34},
  DEU:{income:5,energy:32,oil:8,steel:22,food:16}, JPN:{income:5,energy:35,oil:6,steel:18,food:12},
@@ -466,17 +479,17 @@ async function applyProduction(id){
     const hours=seconds/3600;
     if(seconds>=1){
       const base=countryEconomy(p.rows[0].country_code); let coins=seconds*5,initialEnergy=Number(p.rows[0].energy),initialOil=Number(p.rows[0].oil),initialSteel=Number(p.rows[0].steel),initialFood=Number(p.rows[0].food),energy=initialEnergy+hours*base.energy,oil=initialOil+hours*base.oil,steel=initialSteel+hours*base.steel,food=initialFood+hours*base.food;
-      for(const key of ["power","solar","wind","hydro","geothermal","nuclear","tidal","biomass","wastepower","solarpark","offshorewind","battery"])energy+=hours*(levels[key]||0)*Number(BUILDING_CATALOG[key].production.energy||0);
       for(const [key,item] of Object.entries(BUILDING_CATALOG)){
         const production=item.production||{},level=levels[key]||0;
         if(!level)continue;
-        if(production.energy){if(production.coins)coins+=hours*level*production.coins;continue;}
-        const need=Number(production.energyNeed||0),active=need>0?Math.min(level,energy/(hours*need)):level;
+        const need=Number(production.energyNeed||0);
+        const active=need>0?Math.min(level,energy/(hours*need)):level;
         if(need>0)energy=Math.max(0,energy-hours*active*need);
-        if(production.oil)oil+=hours*active*production.oil;
-        if(production.steel)steel+=hours*active*production.steel;
-        if(production.food)food+=hours*active*production.food;
-        if(production.coins)coins+=hours*active*production.coins;
+        if(production.energy)energy+=hours*level*Number(production.energy);
+        if(production.oil)oil+=hours*active*Number(production.oil);
+        if(production.steel)steel+=hours*active*Number(production.steel);
+        if(production.food)food+=hours*active*Number(production.food);
+        if(production.coins)coins+=hours*active*Number(production.coins);
       }
       const [techRows,cityRows]=await Promise.all([client.query("SELECT tech_id,level FROM player_technologies WHERE telegram_id=$1",[String(id)]),client.query("SELECT COALESCE(SUM(level),0)::int AS total FROM player_cities WHERE telegram_id=$1",[String(id)])]); const tech=Object.fromEntries(techRows.rows.map(x=>[x.tech_id,Number(x.level)])); const cityBoost=1+Math.min(0.30,Number(cityRows.rows[0]?.total||0)*0.015); const event=getCurrentWorldEvent(); const industryBoost=cityBoost*(1+Number(tech.industry||0)*0.04+Number(tech.logistics||0)*0.02); const energyBoost=cityBoost*(1+Number(tech.energy||0)*0.05+Number(tech.logistics||0)*0.02)*(event.bonus==="energy"?1.25:1); const oilBoost=cityBoost*(1+Number(tech.logistics||0)*0.02); const steelBoost=cityBoost*(1+Number(tech.materials||0)*0.05+Number(tech.logistics||0)*0.02)*(event.bonus==="steel"?1.25:1); const foodBoost=cityBoost*(1+Number(tech.agriculture||0)*0.06+Number(tech.logistics||0)*0.02)*(event.bonus==="food"?1.25:1); const coinBoost=industryBoost*(event.bonus==="industry"?1.20:1); await client.query("UPDATE players SET coins=coins+$1::numeric,energy=energy+$2::numeric,oil=oil+$3::numeric,steel=steel+$4::numeric,food=food+$5::numeric,production_at=NOW() WHERE telegram_id=$6",[Math.floor(coins*coinBoost).toString(),Math.floor((Math.floor(energy)-Math.floor(initialEnergy))*energyBoost).toString(),Math.floor((Math.floor(oil)-Math.floor(initialOil))*oilBoost).toString(),Math.floor((Math.floor(steel)-Math.floor(initialSteel))*steelBoost).toString(),Math.floor((Math.floor(food)-Math.floor(initialFood))*foodBoost).toString(),String(id)]);
     }
