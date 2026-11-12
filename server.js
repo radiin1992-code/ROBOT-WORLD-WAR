@@ -16,7 +16,7 @@ app.use(express.static("public",{setHeaders(res,filePath){if(filePath.endsWith("
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.PGSSL === "true" ? { rejectUnauthorized: false } : undefined, max: 10, idleTimeoutMillis: 30000, connectionTimeoutMillis: 10000 });
 const OWNER_ID = "1852348620";
 const OWNER_IDS = new Set([OWNER_ID, "8881463089"]);
-const BUILD_VERSION = process.env.APP_RELEASE_VERSION || "rw-20261111-04";
+const BUILD_VERSION = process.env.APP_RELEASE_VERSION || "rw-20261112-04";
 const BOT_TOKEN = process.env.BOT_TOKEN || "";
 const PUBLIC_URL = process.env.RENDER_EXTERNAL_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? "https://" + process.env.RAILWAY_PUBLIC_DOMAIN : "");
 const MINI_APP_URL = process.env.MINI_APP_URL || PUBLIC_URL;
@@ -99,6 +99,11 @@ async function initDb() {
       created_by BIGINT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
+    ALTER TABLE custom_unit_catalog ADD COLUMN IF NOT EXISTS game_attack INT NOT NULL DEFAULT 0;
+    ALTER TABLE custom_unit_catalog ADD COLUMN IF NOT EXISTS game_defense INT NOT NULL DEFAULT 0;
+    ALTER TABLE custom_unit_catalog ADD COLUMN IF NOT EXISTS game_capacity INT NOT NULL DEFAULT 0;
+    ALTER TABLE custom_unit_catalog ADD COLUMN IF NOT EXISTS game_operation_cost INT NOT NULL DEFAULT 0;
+    ALTER TABLE custom_unit_catalog ADD COLUMN IF NOT EXISTS game_cooldown INT NOT NULL DEFAULT 0;
     CREATE TABLE IF NOT EXISTS national_buildings (
       telegram_id BIGINT NOT NULL REFERENCES players(telegram_id) ON DELETE CASCADE,
       building_type TEXT NOT NULL, level INT NOT NULL DEFAULT 0,
@@ -118,6 +123,9 @@ async function initDb() {
     CREATE INDEX IF NOT EXISTS diplomacy_target_idx ON diplomacy(to_id,status);
 
   `);
+  for (const [key,name,category,categoryName,icon,quantity,coins,steel,food,energy,oil,power,attack,defense,capacity,cooldown] of UNIT_DATABASE) {
+    await pool.query("INSERT INTO custom_unit_catalog(unit_type,name,category,category_name,icon,image_url,quantity,coins,steel,food,energy,oil,power,created_by,game_attack,game_defense,game_capacity,game_operation_cost,game_cooldown) VALUES($1,$2,$3,$4,$5,'',$6,$7,$8,$9,$10,$11,$12,0,$13,$14,$15,$16,$17) ON CONFLICT(unit_type) DO NOTHING",["catalog_"+key,name,category,categoryName,icon,quantity,coins,steel,food,energy,oil,power,attack,defense,capacity,Math.max(1,Math.round(power/80)),cooldown]);
+  }
   await pool.query("DELETE FROM military_units WHERE left(unit_type,6)='asset_'");
   await pool.query("ALTER TABLE players ADD COLUMN IF NOT EXISTS energy_level INT NOT NULL DEFAULT 1");
   await pool.query("ALTER TABLE players ADD COLUMN IF NOT EXISTS shop_cooldown_until TIMESTAMPTZ");
@@ -254,12 +262,12 @@ app.post("/api/upgrade",auth,async(req,res)=>{
 });
 async function ownerOnly(req,res,next){if(!OWNER_IDS.has(String(req.user.id)))return res.status(403).json({ok:false,error:"دسترسی غیرمجاز"});next()}
 app.post("/api/owner/unit-catalog",auth,ownerOnly,async(req,res)=>{
-  const name=String(req.body?.name||"").trim().slice(0,60),category=String(req.body?.category||"ground"),categoryNames={ground:"نیروی زمینی",air:"یگان هوایی",naval:"ناوگان دریایی",support:"پشتیبانی"};
+  const name=String(req.body?.name||"").trim().slice(0,60),category=String(req.body?.category||"ground"),categoryNames={ground:"نیروی زمینی",air:"نیروی هوایی",naval:"ناوگان دریایی",support:"پشتیبانی و شناسایی",defense:"پدافند و دفاع"};
   const imageUrl=String(req.body?.imageUrl||"").trim(),validImage=/^https:\/\//i.test(imageUrl)||/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(imageUrl),icon=String(req.body?.icon||"🧩").slice(0,12),quantity=Number(req.body?.quantity??1),power=Number(req.body?.power??10);
-  const cost={coins:Number(req.body?.coins),steel:Number(req.body?.steel),food:Number(req.body?.food),energy:Number(req.body?.energy),oil:Number(req.body?.oil)};
-  if(name.length<2||!categoryNames[category]||!validImage||imageUrl.length>6000000||!Number.isSafeInteger(quantity)||quantity<1||quantity>1000000||!Number.isSafeInteger(power)||power<1||power>1000000||Object.values(cost).some(v=>!Number.isSafeInteger(v)||v<0||v>100000000000))return res.status(400).json({ok:false,error:"اطلاعات مدل یا قیمت معتبر نیست."});
+  const cost={coins:Number(req.body?.coins),steel:Number(req.body?.steel),food:Number(req.body?.food),energy:Number(req.body?.energy),oil:Number(req.body?.oil)},game={attack:Number(req.body?.gameAttack??power),defense:Number(req.body?.gameDefense??Math.round(power*.55)),capacity:Number(req.body?.gameCapacity??10),operationCost:Number(req.body?.gameOperationCost??Math.max(1,Math.round(power/80))),cooldown:Number(req.body?.gameCooldown??2)};
+  if(name.length<2||!categoryNames[category]||!validImage||imageUrl.length>6000000||!Number.isSafeInteger(quantity)||quantity<1||quantity>1000000||!Number.isSafeInteger(power)||power<1||power>1000000||Object.values(cost).some(v=>!Number.isSafeInteger(v)||v<0||v>100000000000)||Object.values(game).some(v=>!Number.isSafeInteger(v)||v<0||v>1000000))return res.status(400).json({ok:false,error:"اطلاعات مدل یا قیمت معتبر نیست."});
   const key="custom_"+crypto.randomBytes(8).toString("hex");
-  await pool.query("INSERT INTO custom_unit_catalog(unit_type,name,category,category_name,icon,image_url,quantity,coins,steel,food,energy,oil,power,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)",[key,name,category,categoryNames[category],icon,imageUrl,quantity,cost.coins,cost.steel,cost.food,cost.energy,cost.oil,power,String(req.user.id)]);
+  await pool.query("INSERT INTO custom_unit_catalog(unit_type,name,category,category_name,icon,image_url,quantity,coins,steel,food,energy,oil,power,created_by,game_attack,game_defense,game_capacity,game_operation_cost,game_cooldown) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)",[key,name,category,categoryNames[category],icon,imageUrl,quantity,cost.coins,cost.steel,cost.food,cost.energy,cost.oil,power,String(req.user.id),game.attack,game.defense,game.capacity,game.operationCost,game.cooldown]);
   res.json({ok:true,type:key});
 });
 app.post("/api/owner/unit-catalog/:type/delete",auth,ownerOnly,async(req,res)=>{
@@ -318,6 +326,7 @@ const UNIT_CATALOG = {
   air:{name:"یگان هوایی",icon:"✈️",quantity:5,cost:{coins:1250000,steel:90,food:15,energy:100,oil:110},power:260},
   navy:{name:"ناوگان دریایی",icon:"🚢",quantity:3,cost:{coins:1100000,steel:140,food:20,energy:65,oil:95},power:230}
 };
+const UNIT_DATABASE = [["f22","F-22 Raptor","air","نیروی هوایی","🛩️",5,1650000,100,20,110,140,920,88,18,3,2],["f35","F-35 Lightning II","air","نیروی هوایی","✈️",5,1480000,95,25,100,125,850,82,22,3,2],["f16","F-16 Fighting Falcon","air","نیروی هوایی","🛩️",6,980000,65,25,70,90,690,68,18,4,1],["rafale","Dassault Rafale","air","نیروی هوایی","✈️",5,1320000,90,20,90,115,810,78,20,3,2],["typhoon","Eurofighter Typhoon","air","نیروی هوایی","🛩️",5,1370000,95,20,95,120,830,80,20,3,2],["su57","Su-57 Felon","air","نیروی هوایی","🛩️",4,1580000,105,20,105,135,890,84,18,3,2],["b2","B-2 Spirit","air","نیروی هوایی","🛫",2,2800000,190,10,180,210,980,45,36,5,4],["b52","B-52 Stratofortress","air","نیروی هوایی","🛫",2,2200000,170,15,155,190,900,42,40,5,4],["c17","C-17 Globemaster III","air","نیروی هوایی","🛬",3,1650000,120,35,110,130,420,20,95,2,3],["awacs","AWACS Support Aircraft","support","پشتیبانی و شناسایی","📡",2,1750000,90,20,120,150,300,12,75,2,3],["reaper","MQ-9 Reaper","air","نیروی هوایی","🛸",4,1050000,65,15,65,75,560,48,16,3,2],["apache","AH-64 Apache","air","نیروی هوایی","🚁",5,1120000,75,20,75,95,720,62,14,3,2],["chinook","CH-47 Chinook","air","نیروی هوایی","🚁",4,920000,60,35,65,80,280,22,65,2,2],["infantry_pro","Professional Infantry","ground","نیروی زمینی","🪖",100,720000,45,100,25,10,320,58,30,2,1],["mechanized","Mechanized Infantry","ground","نیروی زمینی","🚙",30,980000,80,55,45,35,480,66,38,2,2],["mbt","Main Battle Tank","ground","نیروی زمینی","🛡️",12,1450000,130,20,65,75,820,72,12,4,2],["light_tank","Light Tank","ground","نیروی زمینی","🚜",15,1050000,95,25,50,55,610,58,16,3,2],["artillery","Field Artillery","ground","نیروی زمینی","🎯",8,1180000,105,15,55,65,760,24,10,4,3],["rocket_system","Rocket Support Unit","ground","نیروی زمینی","🚀",6,1380000,125,10,70,90,800,20,8,5,3],["recon","Reconnaissance Vehicle","support","پشتیبانی و شناسایی","🔭",12,760000,55,20,35,30,260,28,18,2,1],["engineer","Engineering Corps","support","پشتیبانی و شناسایی","🏗️",20,680000,45,65,30,20,180,18,25,2,1],["carrier","Aircraft Carrier","naval","ناوگان دریایی","🚢",1,4200000,320,40,210,260,980,92,100,6,5],["destroyer","Guided Missile Destroyer","naval","ناوگان دریایی","🛳️",2,2350000,180,20,125,160,820,80,30,4,3],["frigate","Frigate","naval","ناوگان دریایی","🚢",3,1680000,130,25,95,120,660,68,22,3,2],["submarine","Submarine","naval","ناوگان دریایی","🫧",2,2550000,190,10,110,150,860,74,18,5,4],["patrol_ship","Patrol Ship","naval","ناوگان دریایی","⛴️",4,920000,70,25,55,65,380,42,15,2,1],["amphibious","Amphibious Transport Ship","naval","ناوگان دریایی","🚢",2,1950000,145,55,105,125,360,32,80,3,3],["patriot","Patriot Defense Battery","defense","پدافند و دفاع","🛡️",2,1880000,150,10,95,130,180,920,12,4,3],["thaad","THAAD Defense Battery","defense","پدافند و دفاع","🛡️",1,2450000,210,5,120,160,160,980,10,5,4],["iron_dome","Iron Dome Defense Unit","defense","پدافند و دفاع","🏰",3,1280000,95,15,65,85,140,760,18,3,2],["radar","Long-Range Radar Station","support","پشتیبانی و شناسایی","📡",2,1120000,75,10,60,70,120,440,45,2,2],["command","Mobile Command Center","support","پشتیبانی و شناسایی","🎛️",1,1380000,95,15,80,90,260,380,55,3,2],["supply","Logistics Supply Convoy","support","پشتیبانی و شناسایی","🚚",5,850000,60,90,45,40,120,180,70,2,1],["medical","Field Medical Unit","support","پشتیبانی و شناسایی","🚑",6,780000,50,100,40,35,100,220,45,2,1],["satcom","Satellite Communications Unit","support","پشتیبانی و شناسایی","🛰️",1,1680000,100,10,95,110,210,520,60,3,3],["cyber_defense","Cyber Defense Center","support","پشتیبانی و شناسایی","💻",1,1450000,85,10,90,100,180,600,35,3,3]];
 const BUILDING_CATALOG = {
   power:{name:"نیروگاه برق",icon:"⚡",cost:{coins:650000,steel:90,oil:35,energy:0},production:{energy:30},output:"تولید ۳۰ برق در ساعت"},
   solar:{name:"مزرعه خورشیدی",icon:"☀️",cost:{coins:520000,steel:65,oil:0,energy:0},production:{energy:22},output:"تولید ۲۲ برق در ساعت"},
@@ -419,16 +428,16 @@ app.get("/api/army",auth,async(req,res)=>{
     pool.query("SELECT coins,oil,steel,food,energy FROM players WHERE telegram_id=$1",[String(req.user.id)]),
     pool.query("SELECT unit_type,quantity FROM military_units WHERE telegram_id=$1",[String(req.user.id)]),
     pool.query("SELECT building_type,level FROM national_buildings WHERE telegram_id=$1",[String(req.user.id)]),
-    pool.query("SELECT unit_type,name,category,category_name,icon,image_url,quantity,coins,steel,food,energy,oil,power FROM custom_unit_catalog ORDER BY created_at DESC")
+    pool.query("SELECT unit_type,name,category,category_name,icon,image_url,quantity,coins,steel,food,energy,oil,power,game_attack,game_defense,game_capacity,game_operation_cost,game_cooldown FROM custom_unit_catalog ORDER BY created_at DESC")
   ]);
   const units=Object.fromEntries(u.rows.map(x=>[x.unit_type,Number(x.quantity)]));
   const buildings=Object.fromEntries(b.rows.map(x=>[x.building_type,Number(x.level)]));
   const catalog={...UNIT_CATALOG};
-  for(const x of custom.rows)catalog[x.unit_type]={name:x.name,category:x.category,categoryName:x.category_name,icon:x.icon,imageUrl:x.image_url,quantity:Number(x.quantity),power:Number(x.power),cost:{coins:Number(x.coins),steel:Number(x.steel),food:Number(x.food),energy:Number(x.energy),oil:Number(x.oil)}};
+  for(const x of custom.rows)catalog[x.unit_type]={name:x.name,category:x.category,categoryName:x.category_name,icon:x.icon,imageUrl:x.image_url,quantity:Number(x.quantity),power:Number(x.power),gameAttack:Number(x.game_attack||x.power),gameDefense:Number(x.game_defense||Math.round(Number(x.power)*.55)),gameCapacity:Number(x.game_capacity||10),gameOperationCost:Number(x.game_operation_cost||1),gameCooldown:Number(x.game_cooldown||2),cost:{coins:Number(x.coins),steel:Number(x.steel),food:Number(x.food),energy:Number(x.energy),oil:Number(x.oil)}};
   res.json({ok:true,resources:p.rows[0],units,buildings,unitCatalog:catalog,buildingCatalog:BUILDING_CATALOG});
 });
 app.post("/api/army/recruit",auth,async(req,res)=>{
-  const type=String(req.body?.type||"");let item=UNIT_CATALOG[type];if(!item){const custom=await pool.query("SELECT name,icon,category,category_name,quantity,coins,steel,food,energy,oil,power FROM custom_unit_catalog WHERE unit_type=$1",[type]);if(custom.rowCount){const x=custom.rows[0];item={name:x.name,icon:x.icon,category:x.category,categoryName:x.category_name,quantity:Number(x.quantity),power:Number(x.power),cost:{coins:Number(x.coins),steel:Number(x.steel),food:Number(x.food),energy:Number(x.energy),oil:Number(x.oil)}}}}if(!item)return res.status(400).json({ok:false,error:"نوع یگان معتبر نیست."});
+  const type=String(req.body?.type||"");let item=UNIT_CATALOG[type];if(!item){const custom=await pool.query("SELECT name,icon,category,category_name,quantity,coins,steel,food,energy,oil,power,game_attack,game_defense,game_capacity,game_operation_cost,game_cooldown FROM custom_unit_catalog WHERE unit_type=$1",[type]);if(custom.rowCount){const x=custom.rows[0];item={name:x.name,icon:x.icon,category:x.category,categoryName:x.category_name,quantity:Number(x.quantity),power:Number(x.power),gameAttack:Number(x.game_attack||x.power),gameDefense:Number(x.game_defense||Math.round(Number(x.power)*.55)),gameCapacity:Number(x.game_capacity||10),gameOperationCost:Number(x.game_operation_cost||1),gameCooldown:Number(x.game_cooldown||2),cost:{coins:Number(x.coins),steel:Number(x.steel),food:Number(x.food),energy:Number(x.energy),oil:Number(x.oil)}}}}if(!item)return res.status(400).json({ok:false,error:"نوع یگان معتبر نیست."});
   const batches=Number(req.body?.quantity??1);if(!Number.isSafeInteger(batches)||batches<1||batches>1000000)return res.status(400).json({ok:false,error:"تعداد معتبر نیست."});
   const c=item.cost,totals={coins:c.coins*batches,steel:c.steel*batches,food:c.food*batches,energy:c.energy*batches,oil:c.oil*batches},added=Number(item.quantity)*batches;
   if(!Number.isSafeInteger(added)||Object.values(totals).some(v=>!Number.isSafeInteger(v)))return res.status(400).json({ok:false,error:"تعداد انتخابی بیش از حد مجاز است."});
