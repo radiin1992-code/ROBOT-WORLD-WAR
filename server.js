@@ -16,7 +16,7 @@ app.use(express.static("public",{setHeaders(res,filePath){if(filePath.endsWith("
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.PGSSL === "true" ? { rejectUnauthorized: false } : undefined, max: 10, idleTimeoutMillis: 30000, connectionTimeoutMillis: 10000 });
 const OWNER_ID = "1852348620";
 const OWNER_IDS = new Set([OWNER_ID, "8881463089"]);
-const BUILD_VERSION="rw-20261112-07";
+const BUILD_VERSION="rw-20261112-08";
 const BOT_TOKEN = process.env.BOT_TOKEN || "";
 const PUBLIC_URL = process.env.RENDER_EXTERNAL_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? "https://" + process.env.RAILWAY_PUBLIC_DOMAIN : "");
 const MINI_APP_URL = process.env.MINI_APP_URL || PUBLIC_URL;
@@ -133,6 +133,7 @@ async function initDb() {
       summary TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS battle_reports_players_idx ON battle_reports(attacker_id,defender_id,id DESC);
+    ALTER TABLE battle_reports ADD COLUMN IF NOT EXISTS loot JSONB NOT NULL DEFAULT '{}'::jsonb;
 
 
   `);
@@ -524,7 +525,7 @@ app.post("/api/army/build",auth,async(req,res)=>{
 });
 app.get("/api/battles",auth,async(req,res)=>{
  const id=String(req.user.id);
- const q=await pool.query("SELECT b.id,b.attacker_id,b.defender_id,b.winner_id,b.attacker_power,b.defender_power,b.attacker_losses,b.defender_losses,b.summary,b.created_at,a.country_name AS attacker_country,d.country_name AS defender_country FROM battle_reports b JOIN players a ON a.telegram_id=b.attacker_id JOIN players d ON d.telegram_id=b.defender_id WHERE b.attacker_id=$1 OR b.defender_id=$1 ORDER BY b.id DESC LIMIT 30",[id]);
+ const q=await pool.query("SELECT b.id,b.attacker_id,b.defender_id,b.winner_id,b.attacker_power,b.defender_power,b.attacker_losses,b.defender_losses,b.loot,b.summary,b.created_at,a.country_name AS attacker_country,d.country_name AS defender_country FROM battle_reports b JOIN players a ON a.telegram_id=b.attacker_id JOIN players d ON d.telegram_id=b.defender_id WHERE b.attacker_id=$1 OR b.defender_id=$1 ORDER BY b.id DESC LIMIT 30",[id]);
  res.json({ok:true,reports:q.rows});
 });
 app.post("/api/battles/launch",auth,async(req,res)=>{
@@ -552,27 +553,42 @@ app.post("/api/battles/launch",auth,async(req,res)=>{
   const win=ap>=dp,winner=win?attacker:target,total=ap+dp||1;
   const ar=Math.min(.38,Math.max(.04,(dp/total)*(win ? .30 : .58))),dr=Math.min(.48,Math.max(.05,(ap/total)*(win ? .62 : .34)));
   const al={},dl={};
+  const loot={coins:"0",oil:"0",steel:"0",food:"0",energy:"0"};
+  if(win){
+    const stash=await client.query("SELECT coins,oil,steel,food,energy FROM players WHERE telegram_id=$1",[target]);
+    const take=(value,percent,cap)=>{let n=0n;try{n=BigInt(String(value||"0").split(".")[0])}catch{}let amount=n*BigInt(percent)/100n;const limit=BigInt(cap);if(amount>limit)amount=limit;return amount.toString()};
+    if(stash.rowCount){
+      loot.coins=take(stash.rows[0].coins,5,50000);
+      loot.oil=take(stash.rows[0].oil,5,300);
+      loot.steel=take(stash.rows[0].steel,4,300);
+      loot.food=take(stash.rows[0].food,4,300);
+      loot.energy=take(stash.rows[0].energy,3,200);
+      await client.query("UPDATE players SET coins=coins-$1::numeric,oil=oil-$2::numeric,steel=steel-$3::numeric,food=food-$4::numeric,energy=energy-$5::numeric WHERE telegram_id=$6",[loot.coins,loot.oil,loot.steel,loot.food,loot.energy,target]);
+      await client.query("UPDATE players SET coins=coins+$1::numeric,oil=oil+$2::numeric,steel=steel+$3::numeric,food=food+$4::numeric,energy=energy+$5::numeric WHERE telegram_id=$6",[loot.coins,loot.oil,loot.steel,loot.food,loot.energy,attacker]);
+    }
+  }
   for(const [type,raw] of used){const qty=Number(raw),loss=Math.min(qty,Math.max(0,Math.ceil(qty*ar)));if(loss){al[type]=loss;await client.query("UPDATE military_units SET quantity=GREATEST(0,quantity-$1) WHERE telegram_id=$2 AND unit_type=$3",[loss,attacker,type])}}
   for(const u of defending){const loss=Math.min(u.qty,Math.max(0,Math.ceil(u.qty*dr)));if(loss){dl[u.type]=loss;await client.query("UPDATE military_units SET quantity=GREATEST(0,quantity-$1) WHERE telegram_id=$2 AND unit_type=$3",[loss,target,u.type])}}
   const names=new Map(people.rows.map(p=>[String(p.telegram_id),p.country_name||"کشور"]));
-  const summary=win?("🏆 "+names.get(attacker)+" در نبرد با "+names.get(target)+" پیروز شد."):("🛡️ "+names.get(target)+" حمله "+names.get(attacker)+" را دفع کرد.");
-  const report=await client.query("INSERT INTO battle_reports(attacker_id,defender_id,diplomacy_id,winner_id,attacker_power,defender_power,attacker_losses,defender_losses,summary) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9) RETURNING id",[attacker,target,war.rows[0].id,winner,ap,dp,JSON.stringify(al),JSON.stringify(dl),summary]);
+  const lootText=win?" غنیمت: "+[["🪙",loot.coins],["🛢️",loot.oil],["🔩",loot.steel],["🌾",loot.food],["⚡",loot.energy]].filter(([,v])=>BigInt(v)>0n).map(([icon,v])=>icon+" "+BigInt(v).toLocaleString("en-US")).join(" • "):"";
+  const summary=(win?("🏆 "+names.get(attacker)+" در نبرد با "+names.get(target)+" پیروز شد."):("🛡️ "+names.get(target)+" حمله "+names.get(attacker)+" را دفع کرد."))+lootText;
+  const report=await client.query("INSERT INTO battle_reports(attacker_id,defender_id,diplomacy_id,winner_id,attacker_power,defender_power,attacker_losses,defender_losses,loot,summary) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10) RETURNING id",[attacker,target,war.rows[0].id,winner,ap,dp,JSON.stringify(al),JSON.stringify(dl),JSON.stringify(loot),summary]);
   await client.query("UPDATE players SET wins=wins+1 WHERE telegram_id=$1",[winner]);
   await client.query("UPDATE players SET losses=losses+1 WHERE telegram_id=$1",[winner===attacker?target:attacker]);
   await client.query("COMMIT");
   await publishWorldEvent("⚔️ "+summary+" قدرت مهاجم: "+Math.round(ap).toLocaleString("en-US")+" • قدرت دفاع: "+Math.round(dp).toLocaleString("en-US"),"war",{report:report.rows[0].id});
   await notifyPlayer(target,summary+" گزارش نبرد در بازی ثبت شد.","war",{report:report.rows[0].id});
-  res.json({ok:true,id:report.rows[0].id,summary,attackerPower:ap,defenderPower:dp,attackerLosses:al,defenderLosses:dl});
+  res.json({ok:true,id:report.rows[0].id,summary,loot,attackerPower:ap,defenderPower:dp,attackerLosses:al,defenderLosses:dl});
  }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
 });
 app.get("/api/diplomacy",auth,async(req,res)=>{
   const id=String(req.user.id);
   const q=await pool.query(`SELECT d.id,d.from_id,d.to_id,d.kind,d.status,d.created_at,
-    a.country_name AS from_country,a.country_flag AS from_flag,b.country_name AS to_country,b.country_flag AS to_flag
+    a.country_name AS from_country,a.country_flag AS from_flag,a.country_code AS from_code,b.country_name AS to_country,b.country_flag AS to_flag,b.country_code AS to_code
     FROM diplomacy d JOIN players a ON a.telegram_id=d.from_id JOIN players b ON b.telegram_id=d.to_id
     WHERE (d.from_id=$1 OR d.to_id=$1) AND d.status IN ('pending','active')
     ORDER BY d.id DESC LIMIT 100`,[id]);
-  const p=await pool.query("SELECT telegram_id,country_name,country_flag FROM players WHERE country_code IS NOT NULL AND telegram_id<>$1 ORDER BY country_name",[id]);
+  const p=await pool.query("SELECT telegram_id,country_code,country_name,country_flag FROM players WHERE country_code IS NOT NULL AND telegram_id<>$1 ORDER BY country_name",[id]);
   res.json({ok:true,relations:q.rows,players:p.rows});
 });
 app.post("/api/diplomacy",auth,async(req,res)=>{
