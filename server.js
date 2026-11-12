@@ -125,6 +125,12 @@ async function initDb() {
       telegram_id BIGINT NOT NULL REFERENCES players(telegram_id) ON DELETE CASCADE,
       joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY(group_id,telegram_id)
     );
+    CREATE TABLE IF NOT EXISTS group_admins (
+      group_id BIGINT NOT NULL REFERENCES game_groups(id) ON DELETE CASCADE,
+      telegram_id BIGINT NOT NULL REFERENCES players(telegram_id) ON DELETE CASCADE,
+      promoted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY(group_id,telegram_id)
+    );
     CREATE TABLE IF NOT EXISTS group_messages (
       id BIGSERIAL PRIMARY KEY, group_id BIGINT NOT NULL REFERENCES game_groups(id) ON DELETE CASCADE,
       telegram_id BIGINT NOT NULL REFERENCES players(telegram_id) ON DELETE CASCADE,
@@ -566,6 +572,82 @@ app.post("/api/group-invitations/:id/respond",auth,async(req,res)=>{
     await client.query("COMMIT");
     res.json({ok:true,accepted:action==="accept",group_id:inv.group_id});
   }catch(e){await client.query("ROLLBACK");throw e}finally{client.release()}
+});
+app.get("/api/groups/:id/manage",auth,async(req,res)=>{
+  const id=Number(req.params.id),uid=String(req.user.id);
+  if(!Number.isSafeInteger(id)||id<1)return res.status(400).json({ok:false,error:"گروه معتبر نیست."});
+  const g=await pool.query("SELECT id,name,owner_id FROM game_groups WHERE id=$1",[id]);
+  if(!g.rowCount)return res.status(404).json({ok:false,error:"گروه پیدا نشد."});
+  const mem=await pool.query("SELECT 1 FROM group_members WHERE group_id=$1 AND telegram_id=$2",[id,uid]);
+  if(!mem.rowCount)return res.status(403).json({ok:false,error:"عضو گروه نیستی."});
+  const owner=String(g.rows[0].owner_id)===uid;
+  const adm=await pool.query("SELECT 1 FROM group_admins WHERE group_id=$1 AND telegram_id=$2",[id,uid]);
+  const members=await pool.query("SELECT p.telegram_id,p.first_name,p.country_name,p.country_flag,(p.telegram_id=g.owner_id) AS is_owner,EXISTS(SELECT 1 FROM group_admins a WHERE a.group_id=g.id AND a.telegram_id=p.telegram_id) AS is_admin FROM group_members m JOIN players p ON p.telegram_id=m.telegram_id JOIN game_groups g ON g.id=m.group_id WHERE m.group_id=$1 ORDER BY is_owner DESC,is_admin DESC,p.first_name",[id]);
+  res.json({ok:true,group:g.rows[0],members:members.rows,is_owner:owner,is_admin:!!adm.rowCount});
+});
+app.post("/api/groups/:id/manage",auth,async(req,res)=>{
+  const id=Number(req.params.id),uid=String(req.user.id),action=String(req.body?.action||""),target=String(req.body?.telegram_id||"");
+  if(!Number.isSafeInteger(id)||id<1)return res.status(400).json({ok:false,error:"گروه معتبر نیست."});
+  const c=await pool.connect();
+  try{
+    await c.query("BEGIN");
+    const q=await c.query("SELECT id,name,owner_id FROM game_groups WHERE id=$1 FOR UPDATE",[id]);
+    if(!q.rowCount){await c.query("ROLLBACK");return res.status(404).json({ok:false,error:"گروه پیدا نشد."})}
+    const owner=String(q.rows[0].owner_id)===uid;
+    const mem=await c.query("SELECT 1 FROM group_members WHERE group_id=$1 AND telegram_id=$2",[id,uid]);
+    const adm=await c.query("SELECT 1 FROM group_admins WHERE group_id=$1 AND telegram_id=$2",[id,uid]);
+    if(!mem.rowCount){await c.query("ROLLBACK");return res.status(403).json({ok:false,error:"عضو گروه نیستی."})}
+    if(action==="rename"){
+      const name=String(req.body?.name||"").trim();
+      if(!owner||name.length<2||name.length>48){await c.query("ROLLBACK");return res.status(owner?400:403).json({ok:false,error:owner?"نام گروه باید ۲ تا ۴۸ کاراکتر باشد.":"فقط مالک می‌تواند نام گروه را تغییر دهد."})}
+      await c.query("UPDATE game_groups SET name=$1 WHERE id=$2",[name,id]);
+    }else if(action==="delete"){
+      if(!owner){await c.query("ROLLBACK");return res.status(403).json({ok:false,error:"فقط مالک می‌تواند گروه را حذف کند."})}
+      await c.query("DELETE FROM game_groups WHERE id=$1",[id]);
+    }else if(action==="transfer"){
+      if(!owner||!target||target===uid){await c.query("ROLLBACK");return res.status(403).json({ok:false,error:"فقط مالک می‌تواند مالکیت را منتقل کند."})}
+      const m=await c.query("SELECT 1 FROM group_members WHERE group_id=$1 AND telegram_id=$2",[id,target]);
+      if(!m.rowCount){await c.query("ROLLBACK");return res.status(400).json({ok:false,error:"مالک جدید باید عضو گروه باشد."})}
+      await c.query("UPDATE game_groups SET owner_id=$1 WHERE id=$2",[target,id]);
+      await c.query("DELETE FROM group_admins WHERE group_id=$1 AND telegram_id=$2",[id,target]);
+    }else if(["promote","demote","kick"].includes(action)){
+      if(!owner&&!adm.rowCount){await c.query("ROLLBACK");return res.status(403).json({ok:false,error:"اجازه مدیریت اعضا را نداری."})}
+      if(!target||target===String(q.rows[0].owner_id)||target===uid){await c.query("ROLLBACK");return res.status(400).json({ok:false,error:"این عضو قابل تغییر نیست."})}
+      const m=await c.query("SELECT 1 FROM group_members WHERE group_id=$1 AND telegram_id=$2",[id,target]);
+      if(!m.rowCount){await c.query("ROLLBACK");return res.status(404).json({ok:false,error:"عضو پیدا نشد."})}
+      const ta=await c.query("SELECT 1 FROM group_admins WHERE group_id=$1 AND telegram_id=$2",[id,target]);
+      if(action==="promote"){if(!owner){await c.query("ROLLBACK");return res.status(403).json({ok:false,error:"فقط مالک می‌تواند مدیر تعیین کند."})}await c.query("INSERT INTO group_admins(group_id,telegram_id) VALUES($1,$2) ON CONFLICT DO NOTHING",[id,target])}
+      if(action==="demote"){if(!owner){await c.query("ROLLBACK");return res.status(403).json({ok:false,error:"فقط مالک می‌تواند مدیر را عزل کند."})}await c.query("DELETE FROM group_admins WHERE group_id=$1 AND telegram_id=$2",[id,target])}
+      if(action==="kick"){if(ta.rowCount&&!owner){await c.query("ROLLBACK");return res.status(403).json({ok:false,error:"مدیر فقط توسط مالک قابل حذف است."})}await c.query("DELETE FROM group_members WHERE group_id=$1 AND telegram_id=$2",[id,target]);await c.query("DELETE FROM group_admins WHERE group_id=$1 AND telegram_id=$2",[id,target])}
+    }else if(action==="leave"){
+      if(owner){await c.query("ROLLBACK");return res.status(400).json({ok:false,error:"ابتدا مالکیت را منتقل کن یا گروه را حذف کن."})}
+      await c.query("DELETE FROM group_members WHERE group_id=$1 AND telegram_id=$2",[id,uid]);
+      await c.query("DELETE FROM group_admins WHERE group_id=$1 AND telegram_id=$2",[id,uid]);
+    }else{await c.query("ROLLBACK");return res.status(400).json({ok:false,error:"عملیات نامعتبر است."})}
+    await c.query("COMMIT");res.json({ok:true,deleted:action==="delete",left:action==="leave"});
+  }catch(e){await c.query("ROLLBACK");throw e}finally{c.release()}
+});
+app.post("/api/groups/:id/messages/:mid/action",auth,async(req,res)=>{
+  const id=Number(req.params.id),mid=Number(req.params.mid),uid=String(req.user.id),action=String(req.body?.action||""),body=String(req.body?.body||"").trim();
+  if(!Number.isSafeInteger(id)||!Number.isSafeInteger(mid)||!["edit","delete"].includes(action))return res.status(400).json({ok:false,error:"درخواست معتبر نیست."});
+  if(action==="edit"&&(!body||body.length>2000))return res.status(400).json({ok:false,error:"متن پیام معتبر نیست."});
+  const g=await pool.query("SELECT owner_id FROM game_groups WHERE id=$1",[id]);if(!g.rowCount)return res.status(404).json({ok:false,error:"گروه پیدا نشد."});
+  const mm=await pool.query("SELECT 1 FROM group_members WHERE group_id=$1 AND telegram_id=$2",[id,uid]);if(!mm.rowCount)return res.status(403).json({ok:false,error:"عضو گروه نیستی."});
+  const a=await pool.query("SELECT 1 FROM group_admins WHERE group_id=$1 AND telegram_id=$2",[id,uid]);
+  const m=await pool.query("SELECT telegram_id FROM group_messages WHERE id=$1 AND group_id=$2",[mid,id]);if(!m.rowCount)return res.status(404).json({ok:false,error:"پیام پیدا نشد."});
+  if(String(m.rows[0].telegram_id)!==uid&&String(g.rows[0].owner_id)!==uid&&!a.rowCount)return res.status(403).json({ok:false,error:"فقط نویسنده یا مدیر گروه مجاز است."});
+  if(action==="edit")await pool.query("UPDATE group_messages SET body=$1 WHERE id=$2",[body,mid]);else await pool.query("DELETE FROM group_messages WHERE id=$1",[mid]);
+  res.json({ok:true});
+});
+app.post("/api/dm/:peer/:mid/action",auth,async(req,res)=>{
+  const peer=String(req.params.peer),mid=Number(req.params.mid),uid=String(req.user.id),action=String(req.body?.action||""),body=String(req.body?.body||"").trim();
+  if(!Number.isSafeInteger(mid)||!["edit","delete"].includes(action))return res.status(400).json({ok:false,error:"درخواست معتبر نیست."});
+  if(action==="edit"&&(!body||body.length>2000))return res.status(400).json({ok:false,error:"متن پیام معتبر نیست."});
+  const m=await pool.query("SELECT sender_id FROM direct_messages WHERE id=$1 AND ((sender_id=$2 AND receiver_id=$3) OR (sender_id=$3 AND receiver_id=$2))",[mid,uid,peer]);
+  if(!m.rowCount)return res.status(404).json({ok:false,error:"پیام پیدا نشد."});
+  if(String(m.rows[0].sender_id)!==uid)return res.status(403).json({ok:false,error:"فقط فرستنده می‌تواند پیام خودش را ویرایش یا حذف کند."});
+  if(action==="edit")await pool.query("UPDATE direct_messages SET body=$1 WHERE id=$2",[body,mid]);else await pool.query("DELETE FROM direct_messages WHERE id=$2",[mid]);
+  res.json({ok:true});
 });
 app.get("/api/groups/:id/messages",auth,async(req,res)=>{
   const id=Number(req.params.id), member=await pool.query("SELECT 1 FROM group_members WHERE group_id=$1 AND telegram_id=$2",[id,String(req.user.id)]);
