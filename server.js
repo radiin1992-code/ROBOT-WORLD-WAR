@@ -646,7 +646,7 @@ app.post("/api/dm/:peer/:mid/action",auth,async(req,res)=>{
   const m=await pool.query("SELECT sender_id FROM direct_messages WHERE id=$1 AND ((sender_id=$2 AND receiver_id=$3) OR (sender_id=$3 AND receiver_id=$2))",[mid,uid,peer]);
   if(!m.rowCount)return res.status(404).json({ok:false,error:"پیام پیدا نشد."});
   if(String(m.rows[0].sender_id)!==uid)return res.status(403).json({ok:false,error:"فقط فرستنده می‌تواند پیام خودش را ویرایش یا حذف کند."});
-  if(action==="edit")await pool.query("UPDATE direct_messages SET body=$1 WHERE id=$2",[body,mid]);else await pool.query("DELETE FROM direct_messages WHERE id=$2",[mid]);
+  if(action==="edit")await pool.query("UPDATE direct_messages SET body=$1 WHERE id=$2",[body,mid]);else await pool.query("DELETE FROM direct_messages WHERE id=$1",[mid]);
   res.json({ok:true});
 });
 app.get("/api/groups/:id/messages",auth,async(req,res)=>{
