@@ -14,9 +14,10 @@
   },
   "dependencies": {
     "express": "^4.21.2",
+    "globe.gl": "2.45.0",
+    "i18n-iso-countries": "7.14.0",
     "pg": "^8.13.1",
-    "world-atlas": "2.0.2",
     "topojson-client": "3.1.0",
-    "i18n-iso-countries": "7.14.0"
+    "world-atlas": "2.0.2"
   }
 }

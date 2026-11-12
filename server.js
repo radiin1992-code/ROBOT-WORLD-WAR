@@ -10,10 +10,12 @@ const isoCountries = require("i18n-iso-countries");
 const localWorldGeoJSON = (() => { const collection = topojson.feature(worldTopology, worldTopology.objects.countries); return { type: "FeatureCollection", features: collection.features.map(f => { const a3 = isoCountries.numericToAlpha3(String(f.id).padStart(3, "0")); const a2 = isoCountries.numericToAlpha2(String(f.id).padStart(3, "0")); return { ...f, properties: { ...f.properties, ADMIN: f.properties?.name || "Unknown", ISO_A3: a3 || "", ISO_A2: a2 || "" } }; }).filter(f => /^[A-Z]{3}$/.test(f.properties.ISO_A3)) }; })();
 
 let mapTextureCache=null;
+let mapBumpCache=null;
 const { Pool } = pg;
 const app = express();
 app.use(express.json({ limit: "7mb" }));
 app.use(express.static("public",{setHeaders(res,filePath){if(filePath.endsWith(".html"))res.setHeader("Cache-Control","no-store, no-cache, must-revalidate");}}));
+app.get("/vendor/globe.gl.min.js",(_req,res)=>res.sendFile(process.cwd()+"/node_modules/globe.gl/dist/globe.gl.min.js"));
 // Express 4 does not forward rejected async route promises by itself.
 // Wrap async handlers so database/API failures reach the JSON error handler.
 const asyncRoute = handler => (req,res,next) => Promise.resolve(handler(req,res,next)).catch(next);
@@ -350,7 +352,8 @@ function seasonalSectorWeather(lat,lng,now=new Date()){
 
 const mapGeoCache=localWorldGeoJSON;
 app.get("/api/map-data",(_req,res)=>res.set("Cache-Control","public, max-age=86400").json(mapGeoCache));
-app.get("/api/map-texture",async(_req,res)=>{try{if(mapTextureCache)return res.type("image/jpeg").set("Cache-Control","public,max-age=604800").send(mapTextureCache);for(const url of ["https://cdn.jsdelivr.net/npm/three-globe@2.45.0/example/img/earth-blue-marble.jpg","https://unpkg.com/three-globe@2.45.0/example/img/earth-blue-marble.jpg"]){try{const r=await fetch(url,{signal:AbortSignal.timeout(12000)});if(!r.ok)continue;const b=Buffer.from(await r.arrayBuffer());if(b.length<10000)continue;mapTextureCache=b;return res.type("image/jpeg").set("Cache-Control","public,max-age=604800").send(b)}catch{}}res.status(503).end()}catch{res.status(503).end()}});
+app.get("/api/map-texture",async(_req,res)=>{try{if(mapTextureCache)return res.type("image/jpeg").set("Cache-Control","public,max-age=604800").send(mapTextureCache);for(const url of ["https://cdn.jsdelivr.net/npm/three-globe@2.45.0/example/img/earth-blue-marble.jpg","https://unpkg.com/three-globe@2.45.0/example/img/earth-blue-marble.jpg"]){try{const r=await fetch(url,{signal:AbortSignal.timeout(9000)});if(!r.ok)continue;const b=Buffer.from(await r.arrayBuffer());if(b.length<10000)continue;mapTextureCache=b;return res.type("image/jpeg").set("Cache-Control","public,max-age=604800").send(b)}catch{}}res.status(503).end()}catch{res.status(503).end()}});
+app.get("/api/map-heightmap",async(_req,res)=>{try{if(mapBumpCache)return res.type("image/png").set("Cache-Control","public,max-age=604800").send(mapBumpCache);for(const url of ["https://cdn.jsdelivr.net/npm/three-globe@2.45.0/example/img/earth-topology.png","https://unpkg.com/three-globe@2.45.0/example/img/earth-topology.png"]){try{const r=await fetch(url,{signal:AbortSignal.timeout(9000)});if(!r.ok)continue;const b=Buffer.from(await r.arrayBuffer());if(b.length<10000)continue;mapBumpCache=b;return res.type("image/png").set("Cache-Control","public,max-age=604800").send(b)}catch{}}res.status(503).end()}catch{res.status(503).end()}});
 app.get("/api/world",auth,async(_req,res)=>{
   const [claims,news]=await Promise.all([pool.query("SELECT country_code,telegram_id,country_name FROM players WHERE country_code IS NOT NULL"),pool.query("SELECT id,message FROM world_news ORDER BY id DESC LIMIT 40")]);
   const claimed={};for(const r of claims.rows)claimed[r.country_code]=r.country_name;
