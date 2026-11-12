@@ -4,7 +4,7 @@ import crypto from "node:crypto";
 import { initWorldSystems, registerWorldSystems, getCurrentWorldEvent, getSeasonKey } from "./systems.js";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
-const worldTopology = require("world-atlas/countries-50m.json");
+const worldTopology = require("world-atlas/countries-10m.json");
 const topojson = require("topojson-client");
 const isoCountries = require("i18n-iso-countries");
 const localWorldGeoJSON = (() => { const collection = topojson.feature(worldTopology, worldTopology.objects.countries); return { type: "FeatureCollection", features: collection.features.map(f => { const a3 = isoCountries.numericToAlpha3(String(f.id).padStart(3, "0")); const a2 = isoCountries.numericToAlpha2(String(f.id).padStart(3, "0")); return { ...f, properties: { ...f.properties, ADMIN: f.properties?.name || "Unknown", ISO_A3: a3 || "", ISO_A2: a2 || "" } }; }).filter(f => /^[A-Z]{3}$/.test(f.properties.ISO_A3)) }; })();
@@ -27,7 +27,7 @@ for (const method of ["get","post","put","patch","delete"]) {
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.PGSSL === "true" ? { rejectUnauthorized: false } : undefined, max: 10, idleTimeoutMillis: 30000, connectionTimeoutMillis: 10000 });
 const OWNER_ID = "1852348620";
 const OWNER_IDS = new Set([OWNER_ID, "8881463089"]);
-const BUILD_VERSION='rw-20261112-v2-01';
+const BUILD_VERSION='rw-20261112-v3-01';
 const COMMANDER_CATALOG = [
  {key:"assault",name:"ژنرال آذرخش",role:"فرمانده تهاجمی",description:"رهبری تهاجمی و افزایش قدرت کل نیروی اعزامی",effect:"قدرت حمله +۱۵٪ در سطح ۱، به‌علاوه ۲٪ در هر سطح",base:15,perLevel:2,cost:{coins:120000,oil:250,steel:180,energy:120},image:"https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=720&q=85",icon:"⚔️"},
  {key:"defense",name:"ژنرال سپر آهنین",role:"فرمانده دفاعی",description:"استحکام خطوط دفاعی و افزایش قدرت دفاع کشور",effect:"قدرت دفاع +۲۰٪ در سطح ۱، به‌علاوه ۲٪ در هر سطح",base:20,perLevel:2,cost:{coins:100000,oil:150,steel:300,energy:150},image:"https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=720&q=85",icon:"🛡️"},
