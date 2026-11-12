@@ -768,6 +768,8 @@ app.post("/api/battles/launch",auth,async(req,res)=>{
   if(defenderCommander?.key==="logistics")commanderText.push("کاهش تلفات مدافع "+Math.round(defenderLogistics*100)+"٪");
   if(attackerCommander?.id)await client.query("UPDATE player_commanders SET level=CASE WHEN level<10 AND xp+25>=level*100 THEN level+1 ELSE level END,xp=CASE WHEN level>=10 THEN 0 WHEN xp+25>=level*100 THEN xp+25-level*100 ELSE xp+25 END WHERE id=$1",[attackerCommander.id]);
   if(defenderCommander?.id){const xp=winner===target?40:25;await client.query("UPDATE player_commanders SET level=CASE WHEN level<10 AND xp+$1>=level*100 THEN level+1 ELSE level END,xp=CASE WHEN level>=10 THEN 0 WHEN xp+$1>=level*100 THEN xp+$1-level*100 ELSE xp+$1 END WHERE id=$2",[xp,defenderCommander.id])}
+  if(attackerCommander?.id)commanderText.push("تجربه فرمانده مهاجم +۲۵ XP");
+  if(defenderCommander?.id)commanderText.push("تجربه فرمانده مدافع +"+(winner===target?40:25)+" XP");
   const summary=(win?("🏆 "+names.get(attacker)+" در نبرد با "+names.get(target)+" پیروز شد."):("🛡️ "+names.get(target)+" حمله "+names.get(attacker)+" را دفع کرد."))+lootText+(techText.length?" 🧬 اثر فناوری: "+techText.join(" • "):"")+(commanderText.length?" 🎖️ فرماندهان: "+commanderText.join(" • "):"");
   const report=await client.query("INSERT INTO battle_reports(attacker_id,defender_id,diplomacy_id,winner_id,attacker_power,defender_power,attacker_losses,defender_losses,loot,summary) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10) RETURNING id",[attacker,target,war.rows[0].id,winner,ap,dp,JSON.stringify(al),JSON.stringify(dl),JSON.stringify(loot),summary]);
   await client.query("UPDATE players SET wins=wins+1 WHERE telegram_id=$1",[winner]);
