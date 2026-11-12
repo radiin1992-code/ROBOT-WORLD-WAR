@@ -755,7 +755,7 @@ app.post("/api/shop/buy",auth,async(req,res)=>{
   if(quantity<1n||quantity>BIGINT_MAX/price||quantity>BIGINT_MAX/amount||quantity>BIGINT_MAX/income)
     return res.status(400).json({ok:false,error:"تعداد از ظرفیت ذخیره‌سازی بازی بیشتر است."});
   const totalPrice=(price*quantity).toString(),totalAmount=(amount*quantity).toString(),totalIncome=(income*quantity).toString();
-  const q=await pool.query(\`UPDATE players SET coins=coins-$1::bigint,\${item.column}=\${item.column}+$2::bigint,shop_income=shop_income+$3::bigint,updated_at=NOW() WHERE telegram_id=$4 AND country_code IS NOT NULL AND coins >= $1::bigint RETURNING coins\`,[totalPrice,totalAmount,totalIncome,String(req.user.id)]);
+  const q=await pool.query("UPDATE players SET coins=coins-$1::bigint,"+item.column+"="+item.column+"+$2::bigint,shop_income=shop_income+$3::bigint,updated_at=NOW() WHERE telegram_id=$4 AND country_code IS NOT NULL AND coins >= $1::bigint RETURNING coins",[totalPrice,totalAmount,totalIncome,String(req.user.id)]);
   if(!q.rowCount){
     const state=await pool.query("SELECT coins,country_code FROM players WHERE telegram_id=$1",[String(req.user.id)]);
     if(!state.rowCount||!state.rows[0].country_code)return res.status(400).json({ok:false,error:"اول باید کشور انتخاب کنی."});
