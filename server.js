@@ -13,10 +13,20 @@ const { Pool } = pg;
 const app = express();
 app.use(express.json({ limit: "7mb" }));
 app.use(express.static("public",{setHeaders(res,filePath){if(filePath.endsWith(".html"))res.setHeader("Cache-Control","no-store, no-cache, must-revalidate");}}));
+// Express 4 does not forward rejected async route promises by itself.
+// Wrap async handlers so database/API failures reach the JSON error handler.
+const asyncRoute = handler => (req,res,next) => Promise.resolve(handler(req,res,next)).catch(next);
+for (const method of ["get","post","put","patch","delete"]) {
+  const original = app[method].bind(app);
+  app[method] = (path,...handlers) => original(path,...handlers.map(handler =>
+    typeof handler === "function" && handler.constructor?.name === "AsyncFunction" ? asyncRoute(handler) : handler
+  ));
+}
+
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.PGSSL === "true" ? { rejectUnauthorized: false } : undefined, max: 10, idleTimeoutMillis: 30000, connectionTimeoutMillis: 10000 });
 const OWNER_ID = "1852348620";
 const OWNER_IDS = new Set([OWNER_ID, "8881463089"]);
-const BUILD_VERSION='rw-20261112-12';
+const BUILD_VERSION='rw-20261112-13';
 const BOT_TOKEN = process.env.BOT_TOKEN || "";
 const PUBLIC_URL = process.env.RENDER_EXTERNAL_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? "https://" + process.env.RAILWAY_PUBLIC_DOMAIN : "");
 const MINI_APP_URL = process.env.MINI_APP_URL || PUBLIC_URL;
@@ -222,7 +232,8 @@ function verifyInitData(initData) {
   if (!hash) return null;
   params.delete("hash");
   const authDate = Number(params.get("auth_date"));
-  if (!authDate || Math.abs(Date.now()/1000-authDate)>86400) return null;
+  const now = Date.now() / 1000;
+  if (!authDate || authDate > now + 30 || now - authDate > 86400) return null;
   const dataCheck = [...params.entries()].sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>k+"="+v).join("\n");
   const secret = crypto.createHmac("sha256","WebAppData").update(BOT_TOKEN).digest();
   const calculated = crypto.createHmac("sha256",secret).update(dataCheck).digest("hex");
@@ -254,7 +265,7 @@ app.get("/api/profile",auth,async(req,res)=>{
   p.income=300+Math.round(buildingIncome/60);p.gdp=Number(p.coins)*4;p.population=0;
   res.json({ok:true,profile:p});
 });
-app.get("/api/treasury",auth,async(req,res)=>{await applyProduction(req.user.id);const q=await pool.query("SELECT coins,country_code,industry,agriculture,level,shop_income FROM players WHERE telegram_id=$1",[String(req.user.id)]);if(!q.rowCount)return res.status(404).json({ok:false});const p=q.rows[0];const b=await pool.query("SELECT building_type,level FROM national_buildings WHERE telegram_id=$1",[String(req.user.id)]);const buildingIncome=b.rows.reduce((sum,row)=>sum+Number(row.level||0)*Number(BUILDING_CATALOG[row.building_type]?.production?.coins||0),0);const income=300;res.json({ok:true,coins:p.coins,income});});
+app.get("/api/treasury",auth,async(req,res)=>{await applyProduction(req.user.id);const q=await pool.query("SELECT coins,country_code,industry,agriculture,level,shop_income FROM players WHERE telegram_id=$1",[String(req.user.id)]);if(!q.rowCount)return res.status(404).json({ok:false});const p=q.rows[0];const b=await pool.query("SELECT building_type,level FROM national_buildings WHERE telegram_id=$1",[String(req.user.id)]);const buildingIncome=b.rows.reduce((sum,row)=>sum+Number(row.level||0)*Number(BUILDING_CATALOG[row.building_type]?.production?.coins||0),0);const income=300+Math.round(buildingIncome/60);res.json({ok:true,coins:p.coins,income});});
 app.get("/api/news",auth,async(_req,res)=>{const q=await pool.query("SELECT id,message,created_at FROM world_news ORDER BY id DESC LIMIT 60");res.json({ok:true,items:q.rows});});
 const mapGeoCache=localWorldGeoJSON;
 app.get("/api/map-data",(_req,res)=>res.set("Cache-Control","public, max-age=86400").json(mapGeoCache));
@@ -863,7 +874,7 @@ app.post("/telegram/webhook",async(req,res)=>{
   const txt=m.text||"",chat=m.chat.id;
   if(m.from?.id) await pool.query("INSERT INTO players(telegram_id,username,first_name,chat_id) VALUES($1,$2,$3,$4) ON CONFLICT(telegram_id) DO UPDATE SET username=EXCLUDED.username,first_name=EXCLUDED.first_name,chat_id=EXCLUDED.chat_id,updated_at=NOW()",[String(m.from.id),m.from.username||"",m.from.first_name||"Commander",String(chat)]);
   if(txt.startsWith("/start") || txt.startsWith("/game")){
-    const text="💥 به radinwar خوش اومدی فرمانده!\n\n🌍 اول یک کشور آزاد انتخاب کن؛ هر کشور فقط یک فرمانده داره و انتخابت قابل تغییر نیست.\n💰 با ۱۰ میلیون سرمایه شروع می‌کنی.\n🏗️ اقتصاد و زیرساختت رو توسعه بده.\n🤝 با فرمانده‌های دیگه گفت‌وگو و گروه تشکیل بده.\n📣 بیانیه منتشر کن و رویدادهای داخل بازی رو دنبال کن.\n\n📜 قوانین: احترام به بازیکن‌ها، ممنوعیت اسپم و جعل خبر واقعی، و رعایت مالکیت دائمی کشورها.";
+    const text="💥 به radinwar خوش اومدی فرمانده!\n\n🌍 اول یک کشور آزاد انتخاب کن؛ هر کشور فقط یک فرمانده داره و انتخابت قابل تغییر نیست.\n💰 با ۱۰٬۰۰۰ پول سرمایه شروع می‌کنی.\n🏗️ اقتصاد و زیرساختت رو توسعه بده.\n🤝 با فرمانده‌های دیگه گفت‌وگو و گروه تشکیل بده.\n📣 بیانیه منتشر کن و رویدادهای داخل بازی رو دنبال کن.\n\n📜 قوانین: احترام به بازیکن‌ها، ممنوعیت اسپم و جعل خبر واقعی، و رعایت مالکیت دائمی کشورها.";
     await telegramApi("sendMessage",{chat_id:chat,text,reply_markup:{inline_keyboard:[[{text:"🚀 ورود به بازی",web_app:{url:MINI_APP_URL}}]]}});
   } else if(txt.startsWith("/help")){
     await telegramApi("sendMessage",{chat_id:chat,text:"📘 راهنمای radinwar💥\n/start یا /game: ورود به بازی\nکشور: انتخاب دائمی یک کشور آزاد\nاقتصاد: خرید منابع و توسعه زیرساخت\nارتباطات: چت خصوصی و گروه‌ها\nبیانیه‌ها: انتشار پیام و تصویر\nبازار جهانی: رویدادهای داخل بازی\n/help: نمایش همین راهنما\n\nقوانین: احترام، عدم اسپم، عدم جعل خبر واقعی و رعایت انتخاب دائمی کشور.",reply_markup:{inline_keyboard:[[{text:"🌍 باز کردن Mini App",web_app:{url:MINI_APP_URL}}]]}});
@@ -877,6 +888,13 @@ app.post("/telegram/webhook",async(req,res)=>{
 });
 app.use("/api",(req,res)=>res.status(404).set("Cache-Control","no-store").json({ok:false,error:"مسیر API پیدا نشد",path:req.originalUrl}));
 app.get("*",(req,res)=>res.sendFile(process.cwd()+"/public/index.html"));
+app.use((err,req,res,next)=>{
+  console.error("[request-error]",req.method,req.originalUrl,err?.stack||err);
+  if(res.headersSent)return next(err);
+  const status=Number.isInteger(err?.status)&&err.status>=400&&err.status<600?err.status:500;
+  res.status(status).json({ok:false,error:status===500?"خطای موقت سرور رخ داد. دوباره تلاش کن.":(err.message||"درخواست نامعتبر است.")});
+});
+
 const port=process.env.PORT||3000;
 initDb().then(()=>app.listen(port,async()=>{
   console.log("radinwar💥 online on "+port);
