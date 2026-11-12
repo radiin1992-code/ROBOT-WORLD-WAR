@@ -136,6 +136,16 @@ async function initDb() {
   await pool.query("ALTER TABLE players ADD COLUMN IF NOT EXISTS country_flag TEXT");
   await pool.query("ALTER TABLE players ADD COLUMN IF NOT EXISTS production_at TIMESTAMPTZ NOT NULL DEFAULT NOW()");
   await pool.query("ALTER TABLE players ADD COLUMN IF NOT EXISTS shop_income BIGINT NOT NULL DEFAULT 0");
+  await pool.query(`ALTER TABLE players
+    ALTER COLUMN coins TYPE NUMERIC USING coins::numeric,
+    ALTER COLUMN oil TYPE NUMERIC USING oil::numeric,
+    ALTER COLUMN steel TYPE NUMERIC USING steel::numeric,
+    ALTER COLUMN food TYPE NUMERIC USING food::numeric,
+    ALTER COLUMN energy TYPE NUMERIC USING energy::numeric,
+    ALTER COLUMN shop_income TYPE NUMERIC USING shop_income::numeric,
+    ALTER COLUMN industry TYPE NUMERIC USING industry::numeric,
+    ALTER COLUMN agriculture TYPE NUMERIC USING agriculture::numeric,
+    ALTER COLUMN technology TYPE NUMERIC USING technology::numeric`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS game_groups (
       id BIGSERIAL PRIMARY KEY, name TEXT NOT NULL, owner_id BIGINT NOT NULL REFERENCES players(telegram_id),
@@ -758,11 +768,11 @@ app.post("/api/shop/buy",auth,async(req,res)=>{
   if(!item)return res.status(400).json({ok:false,error:"کالای نامعتبر."});
   if(!/^\d+$/.test(quantityText))return res.status(400).json({ok:false,error:"تعداد خرید معتبر نیست."});
   let quantity;try{quantity=BigInt(quantityText)}catch{return res.status(400).json({ok:false,error:"تعداد خرید معتبر نیست."})}
-  const BIGINT_MAX=9223372036854775807n,price=BigInt(item.price),amount=BigInt(item.amount),income=BigInt(item.incomeBonus);
-  if(quantity<1n||quantity>BIGINT_MAX/price||quantity>BIGINT_MAX/amount||quantity>BIGINT_MAX/income)
-    return res.status(400).json({ok:false,error:"تعداد از ظرفیت ذخیره‌سازی بازی بیشتر است."});
+  if(quantity<1n||quantity.toString().length>100000)
+    return res.status(400).json({ok:false,error:"تعداد باید مثبت باشد و از ظرفیت پردازش درخواست بیشتر نشود."});
+  const price=BigInt(item.price),amount=BigInt(item.amount),income=BigInt(item.incomeBonus);
   const totalPrice=(price*quantity).toString(),totalAmount=(amount*quantity).toString(),totalIncome=(income*quantity).toString();
-  const q=await pool.query("UPDATE players SET coins=coins-$1::bigint,"+item.column+"="+item.column+"+$2::bigint,shop_income=shop_income+$3::bigint,updated_at=NOW() WHERE telegram_id=$4 AND country_code IS NOT NULL AND coins >= $1::bigint RETURNING coins",[totalPrice,totalAmount,totalIncome,String(req.user.id)]);
+  const q=await pool.query("UPDATE players SET coins=coins-$1::numeric,"+item.column+"="+item.column+"+$2::numeric,shop_income=shop_income+$3::numeric,updated_at=NOW() WHERE telegram_id=$4 AND country_code IS NOT NULL AND coins >= $1::numeric RETURNING coins::text AS coins",[totalPrice,totalAmount,totalIncome,String(req.user.id)]);
   if(!q.rowCount){
     const state=await pool.query("SELECT coins,country_code FROM players WHERE telegram_id=$1",[String(req.user.id)]);
     if(!state.rowCount||!state.rows[0].country_code)return res.status(400).json({ok:false,error:"اول باید کشور انتخاب کنی."});
