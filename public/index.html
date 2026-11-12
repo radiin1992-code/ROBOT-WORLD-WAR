@@ -376,12 +376,13 @@ async function drawGlobe(){if(!geo){await loadGeo();if(!geo)return}await renderW
 async function loadProfile(){const d=await api('profile');if(!d.ok)return false;me=d.profile;$('userName').textContent=me.first_name||'فرمانده';$('ownerTools')?.classList.toggle('hide',!OWNER_IDS.has(String(me.telegram_id)));if(OWNER_IDS.has(String(me.telegram_id)))loadOwnerPlayers();if(!me.country_code){$('countryScreen').classList.remove('hide');$('lobby').classList.add('hide');$('appHeader').classList.add('hide');return true}$('countryScreen').classList.add('hide');$('lobby').classList.remove('hide');$('appHeader').classList.remove('hide');$('welcome').textContent=me.country_name+' — فرماندهی';$('countryName').textContent=me.country_name;$('countryHero').style.setProperty('--hero-image',"url('https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=1400&q=90')");$('armyPower').textContent=Number(me.military_power||0).toLocaleString('en-US');$('energyValue').textContent=Number(me.energy||0).toLocaleString('en-US');$('coins').textContent=shopBigIntFormat(me.coins);$('level').textContent=me.level;$('income').textContent=Number(me.income||0).toLocaleString('en-US');renderEconomy();loadDailyRewards();loadShop();loadAnnouncements();loadGroups();loadPlayers();loadNews();if(geo)drawGlobe();return true}
 function renderEconomy(){const names=[['oil','🛢️','نفت'],['steel','🔩','فولاد'],['food','🌾','غذا'],['energy','⚡','انرژی']];$('resourceGrid').innerHTML=names.map(([k,i,n])=>'<div class="resource-chip"><span>'+i+'</span><small>'+n+'</small><b>'+shopBigIntFormat(me[k]||0)+'</b></div>').join('');$('economyGrid').innerHTML='<div class="item"><b>💰 خزانه ملی</b><small>'+Number(me.coins).toLocaleString('en-US')+' پول</small></div>'+names.map(([k,i,n])=>'<div class="item"><b>'+i+' '+n+'</b><small>'+Number(me[k]||0).toLocaleString('en-US')+' واحد</small></div>').join('')}
 let shopPurchasePending=false,shopItems=[];
-const shopBigIntFormat=value=>{try{return BigInt(value||0).toLocaleString("en-US")}catch{return "0"}};
+const shopBigIntValue=value=>{try{const raw=String(value??0).trim();return BigInt(raw.includes(".")?raw.split(".")[0]:raw)}catch{return 0n}};
+const shopBigIntFormat=value=>shopBigIntValue(value).toLocaleString("en-US");
 function shopDigits(value){return String(value??"").replace(/[۰-۹]/g,d=>String("۰۱۲۳۴۵۶۷۸۹".indexOf(d))).replace(/[٠-٩]/g,d=>String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).replace(/[٬,\s]/g,"")}
 function updateShopCard(card,item){
  const input=card.querySelector("[data-quantity]"),raw=shopDigits(input.value);
  let qty=0n,valid=/^\d+$/.test(raw);if(valid){try{qty=BigInt(raw)}catch{valid=false}}
- let coins=0n;try{coins=BigInt(me?.coins||0)}catch{}
+ let coins=shopBigIntValue(me?.coins||0);
  const price=BigInt(item.price),amount=BigInt(item.amount),income=BigInt(item.incomeBonus),max=coins/price;
  const totalPrice=qty*price,totalAmount=qty*amount,totalIncome=qty*income;
  card.querySelector("[data-max]").disabled=max<1n||shopPurchasePending;
@@ -617,7 +618,7 @@ $("spyLaunch")?.addEventListener("click",async()=>{const target=$("spyTarget").v
 
 function switchView(name){document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('active',x.dataset.view===name));document.querySelectorAll('.bottom-nav button').forEach(x=>x.classList.toggle('active',x.dataset.view===name));document.querySelectorAll('.view').forEach(x=>x.classList.toggle('active',x.id===name));if(window.radinwarGlobe){if(name==='map')window.radinwarGlobe.resumeAnimation?.();else window.radinwarGlobe.pauseAnimation?.()}if(name==='map'){loadGeo().then(()=>drawGlobe());}if(name==='army'||name==='economy')loadArmy();if(name==='war'||name==='diplomacy')loadDiplomacy();if(name==='market')loadNews();if(name==='announcements')loadAnnouncements();if(name==='groups'){loadGroups();loadGroupInvitations();}if(name==='private')loadPlayers();if(name==='commandcenter')loadCommandCenter();window.scrollTo({top:0,behavior:'smooth'})}document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>switchView(b.dataset.view));
 const originalLoadPlayers=loadPlayers;loadPlayers=async()=>{await originalLoadPlayers();fillMemberSelect()};
-const CLIENT_BUILD_VERSION='rw-20261112-19';let updateReloadStarted=false;
+const CLIENT_BUILD_VERSION='rw-20261112-20';let updateReloadStarted=false;
 async function checkServerVersion(){
  if(updateReloadStarted||!INIT_DATA)return;
  try{
